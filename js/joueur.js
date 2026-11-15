@@ -1,0 +1,214 @@
+// mypocketclub · fiche joueur : informations, parents, autorisations datées, licence et cotisation, corbeille.
+import { BRAND } from '../config.js';
+import { hooks, S, sb, esc, run, toast, render, refresh, armed, isArmed, ACTIONS, FORMS, club, isBoard, isPresident, hasArea, coachOf, contactsHidden, team, teamName, pl, pname, adminOf, parentsOf, isParentOf, canManagePlayer, canAdminPlayer, outranks, isMajor, name, num, plural } from './core.js';
+import { backAfterDelete } from './core.js';
+import { icon, delBtn, field } from './ui.js';
+import { payFamilySoon } from './v310.js';
+
+const CONSENTS = [['image', "Droit à l'image (photos et vidéos du club)"], ['alone', 'Rentre seul après la séance'], ['care', "Soins d'urgence autorisés en cas d'accident"], ['transport', 'Covoiturage par les parents'], ['rgpd', 'Politique de confidentialité acceptée']];
+const LIC = ['Préinscrit club', 'Préinscrit fédé', 'Licencié'];
+const PAY = ['Chèque', 'Espèces', 'Virement', 'HelloAsso', 'Carte', "Pass'Sport", 'Autre'];
+const eur = (x) => (x == null ? '—' : (+x).toFixed(2).replace('.00', '').replace('.', ',') + ' €');
+// n° 32 : l'encadrement ne modifie que les fiches de ceux qui sont sous lui dans la pyramide
+const canEdit = (p) => isParentOf(p.id) || p.user_id === S.me.id || (canManagePlayer(p) && outranks(p.user_id));
+// n° 9 : un majeur donne ses autorisations lui-même ; un mineur, par un parent (mineur par défaut sans date de naissance)
+const canConsent = (p) => (isMajor(p) ? p.user_id === S.me.id : isParentOf(p.id)) || isBoard();
+
+export function feeState(a) {
+  if (!a || a.fee_amount == null) return a && +a.fee_paid > 0 ? 'Partielle' : 'Montant à définir';
+  return +a.fee_paid >= +a.fee_amount ? 'Payée' : +a.fee_paid > 0 ? 'Partielle' : 'À payer';
+}
+const cls = (v) => (['Licencié', 'Payée'].includes(v) ? 'ok' : ['À payer', 'Préinscrit club'].includes(v) ? 'ko' : 'wait');
+// 5.8.0 · n° 213 : des mots clairs pour chaque statut (les valeurs gardées en base ne changent pas)
+// licence : Préinscrit club (rien de demandé à la fédération), Préinscrit fédé (demandée, pas encore validée), Licencié ;
+// cotisation : Payée, Partielle, À payer, Montant à définir (ou « à jour » / « pas à jour » sans les montants) ; certificat
+export const LIC_LABEL = { 'Préinscrit club': 'Licence à demander', 'Préinscrit fédé': 'Licence demandée, en attente', 'Licencié': 'Licence validée' };
+export const FEE_LABEL = { 'Payée': 'Cotisation payée', 'Partielle': 'Cotisation payée en partie', 'À payer': 'Cotisation à payer', 'Montant à définir': 'Tarif pas encore fixé' };
+export const licLabel = (v) => LIC_LABEL[v || 'Préinscrit club'] || v;
+// n° 140 : sur la fiche, chaque pastille mène à sa rubrique (plus bas sur la même fiche) ; on n'y voit que ce que ses droits
+// permettent (la pastille n'existe que si la licence est lisible ; les montants restent réservés à la trésorerie et au président)
+export function statusPills(p, links = false) {
+  const a = adminOf(p.id); if (!a) return '';
+  const pill = (c, t, k) => (links ? `<button class="pill ${c}" data-act="pljump" data-k="${k}" aria-label="${esc(t)} : aller à la section">${esc(t)}</button>` : `<span class="pill ${c}">${esc(t)}</span>`);
+  // 4.4.0 (n° 114) : sans accès aux montants, « cotisation à jour » seulement si le président l'a activé
+  const fee = a.nofee ? (a.fee_ok == null ? '' : pill(a.fee_ok ? 'ok' : 'ko', a.fee_ok ? 'Cotisation à jour' : 'Cotisation en retard', 'cotis')) : pill(cls(feeState(a)), FEE_LABEL[feeState(a)], 'cotis');
+  return pill(cls(a.licence_state || 'Préinscrit club'), licLabel(a.licence_state), 'lic') + fee + (a.health_doc ? '' : pill('ko', 'Certificat à fournir', 'certif'));
+}
+// n° 138 : en tête de la fiche, ce qui reste à régler (trésorerie, secrétariat, licences, président), chaque ligne mène à sa rubrique
+function toSettle(p, a) {
+  if (!a || p.from_partner || !(isPresident() || ['tresorerie', 'secretariat', 'licences'].some(hasArea))) return '';
+  const l = [], rest = a.nofee || a.fee_amount == null ? null : Math.max(0, +a.fee_amount - (+a.fee_paid || 0));
+  if (rest) l.push(['cotis', `Cotisation : ${eur(rest)} à régler`, 'ko']);
+  else if (a.nofee && a.fee_ok === false) l.push(['cotis', 'Cotisation en retard', 'ko']);
+  else if (!a.nofee && a.fee_amount == null && !+a.fee_paid && (isPresident() || hasArea('tresorerie'))) l.push(['cotis', 'Montant de la cotisation à définir (tarifs du club)', 'wait']);
+  if (a.licence_state !== 'Licencié') l.push(['lic', licLabel(a.licence_state), a.licence_state === 'Préinscrit fédé' ? 'wait' : 'ko']);
+  if (!a.health_doc) l.push(['certif', 'Certificat ou questionnaire de santé manquant', 'ko']);
+  if (!l.length) return '';
+  return `<div class="card warn"><b>À régler</b><div class="list">${l.map(([k, t, c]) => `<button class="row" data-act="pljump" data-k="${k}"><span class="g">${esc(t)}</span><span class="pill ${c}" style="flex:none">Voir</span></button>`).join('')}</div></div>`;
+}
+// Licence (et réduction pour la trésorerie) ; la licence passe par set_licence (4.4.0)
+function licForm(pid, A, disc, D = {}) {
+  return `<form id="padminf" data-id="${pid}" class="card"><div class="kick">${disc ? 'Licence et réduction' : 'Licence'}</div>${field('g1', 'Licence', `<select id="g1" name="licence_state">${LIC.map((x) => `<option value="${x}" ${A.licence_state === x ? 'selected' : ''}>${x} · ${LIC_LABEL[x].toLowerCase()}</option>`).join('')}</select>`)}${field('g2', 'Numéro de licence', `<input id="g2" name="licence_number" value="${esc(A.licence_number || '')}">`)}
+    <label class="check"><input type="checkbox" name="health_doc" ${A.health_doc ? 'checked' : ''}><span>Certificat ou questionnaire de santé fourni</span></label>
+    ${disc ? `<div class="grid2">${field('g7', 'Réduction (€)', `<input id="g7" name="disc" type="number" step="0.01" min="0" inputmode="decimal" value="${esc(D.amount ?? '')}">`)}${field('g8', 'Motif (bureau seulement)', `<input id="g8" name="disc_reason" value="${esc(D.reason || '')}" placeholder="Fratrie, aide de la mairie…">`)}</div><p class="note">Ne pas saisir d’information médicale.</p>` : ''}
+    <button class="btn main" type="submit">Enregistrer</button></form><p class="note">${disc ? 'Le montant dû vient de la grille des tarifs du club, moins la réduction. ' : ''}Aucune donnée de santé : seulement « fourni » ou non.</p>`;
+}
+export function presence(pid) {
+  const r = S.att.filter((x) => x.player_id === pid), ok = r.filter((x) => x.status !== 'absent').length;
+  return { n: r.length, ok, late: r.filter((x) => x.status === 'retard').length };
+}
+export function feeFor(p) {
+  const g = S.fees, t = team(p.team_id);
+  return (g.find((x) => x.team_id && x.team_id === p.team_id) || g.find((x) => !x.team_id && t && x.category && x.category === (t.category || t.name)) || {}).amount ?? null;
+}
+const tel = (n) => String(n || '').replace(/\s/g, '');
+
+// 5.3.0 : un joueur de 15 à 17 ans (compte à lui, sans parent relié) invite un parent par e-mail ; le parent ouvre le lien, crée son compte,
+// et sa demande « parent » part chez le président (lien #parent=…, gardé jusqu'à la connexion)
+const age = (p) => { if (!p.birth_date) return null; const b = new Date(p.birth_date), n = new Date(); let a = n.getFullYear() - b.getFullYear(); if (n < new Date(n.getFullYear(), b.getMonth(), b.getDate())) a--; return a; };
+const inviteBlock = (p) => {
+  const a = age(p); if (p.user_id !== S.me.id || a === null || a < 15 || a > 17 || parentsOf(p.id).length) return '';
+  return `<div class="sec"><h2>Invite un parent</h2></div><form id="pinvf" class="card stack" data-id="${p.id}"><p class="note" style="margin:0">Tu as moins de 18 ans : demande à un parent de rejoindre mypocketclub. Il reçoit un e-mail avec un lien ; le président du club valide ensuite sa demande.</p>${field('pinv1', 'E-mail d’un parent', '<input id="pinv1" name="email" type="email" required autocomplete="off" inputmode="email">')}<button class="btn main" type="submit">Envoyer l’invitation</button>${S.invSent ? '<p class="note" style="margin:0">Invitation envoyée. Tu peux en renvoyer une autre (3 par jour au maximum).</p>' : ''}</form>`;
+};
+const TOKEN_KEY = 'pc_parent_invite';
+export function captureParentToken() {
+  const m = /^#parent=([a-f0-9]{64})$/.exec(location.hash || '');
+  if (!m) return;
+  try { localStorage.setItem(TOKEN_KEY, m[1]); } catch { /* sans stockage, le lien reste dans l'adresse */ }
+  history.replaceState(null, '', location.pathname + location.search);
+}
+export async function acceptParentInvite() {
+  let t = null; try { t = localStorage.getItem(TOKEN_KEY); } catch { /* rien */ }
+  if (!t || !S.me) return;
+  const r = await sb.rpc('accept_parent_invitation', { p_token: t });
+  try { localStorage.removeItem(TOKEN_KEY); } catch { /* rien */ }
+  toast(r?.error ? (r.error.message || 'Invitation impossible') : 'Ta demande est envoyée au président du club. Tu auras accès dès qu’il l’aura validée.');
+}
+// 5.3.0 : le président retire l'accès d'un joueur qui a un compte (ce club seulement) ; la fiche part à la corbeille 30 jours
+const accBtn = (p) => isPresident() && p.user_id && p.user_id !== S.me.id ? `<p class="note">Cette personne a un compte. « Supprimer le compte » retire son accès à ce club seulement (son compte reste valable ailleurs).</p>${delBtn('pacc', p.id, 'Supprimer le compte de ce joueur', 'Confirmer : accès retiré, fiche à la corbeille (30 jours)', isArmed('pacc' + p.id))}` : '';
+export function playerPage(pid) {
+  const p = pl(pid); if (!p) return '<p class="empty">Fiche introuvable (à la corbeille ?).</p>';
+  // n° 113 : le staff modifie une fiche depuis l'espace de l'équipe (onglet Effectif) ; ouverte depuis l'onglet Équipe, elle est en lecture seule
+  const staff = canEdit(p) && !isParentOf(p.id) && p.user_id !== S.me.id, ed = canEdit(p) && (!staff || !!S.tsp), cons = canConsent(p), board = isBoard(), a = adminOf(pid), c = p.consents || {}, pr = presence(pid), par = parentsOf(pid);
+  let h = `<div class="card lift"><div class="det">${esc(teamName(p.team_id) || 'Sans équipe')}${p.birth_date ? ' · né(e) le ' + p.birth_date.split('-').reverse().join('/') : ' · <b>date de naissance à compléter</b>'}${isMajor(p) ? ' · majeur' : ''}</div>${pr.n ? `<div class="chips"><span class="pill blue">Présence ${pr.ok} / ${pr.n}</span>${pr.late ? `<span class="pill wait">${pr.late} retard${pr.late > 1 ? 's' : ''}</span>` : ''}</div>` : ''}<div class="chips">${statusPills(p, true)}</div></div>` + toSettle(p, a);
+  // n° 78 : équipe en entente → club du joueur (seuls les joueurs de notre club entrent dans la trésorerie)
+  const tt = team(p.team_id);
+  if (tt && tt.partner_state && tt.partner_state !== 'aucune') {
+    h += `<div class="card"><div class="kick">Club du joueur · équipe en entente</div>${canManagePlayer(p) ? `<div class="chips"><button class="chip" data-act="plclub" data-id="${p.id}" data-v="0" aria-pressed="${!p.from_partner}">Notre club</button><button class="chip" data-act="plclub" data-id="${p.id}" data-v="1" aria-pressed="${!!p.from_partner}">${esc(tt.partner_name || 'Club partenaire')}</button></div>` : `<span class="pill blue">${esc(p.from_partner ? tt.partner_name || 'Club partenaire' : 'Notre club')}</span>`}${p.from_partner ? '<p class="note">Joueur du club partenaire : hors licences, cotisations et relances de paiement de notre club.</p>' : ''}</div>`;
+  }
+  // n° 113 : bouton pour passer en modification dans l'espace de l'équipe
+  if (staff && !S.tsp && p.team_id) h += `<button class="btn" data-act="tsplayer" data-id="${p.id}">${icon('doc', 20)}Modifier dans l'espace de l'équipe</button>`;
+  h += payFamilySoon(p); // n° 115
+  // informations
+  h += '<div class="sec"><h2>Informations</h2></div>';
+  const hid = contactsHidden() && !coachOf(p.team_id) && !isParentOf(p.id) && p.user_id !== S.me.id; // 4.4.0 : coordonnées masquées par le président
+  if (hid) h += '<div class="card pale"><p class="note" style="margin:0">Coordonnées de la famille et contact d’urgence masqués par le président (Réglages › Droits).</p></div>';
+  if (ed) {
+    const em = (p.emergency_name || '').split(' ');
+    h += `<form id="plf" data-id="${pid}" class="card"><div class="grid2">${field('f1', 'Prénom', `<input id="f1" name="first_name" value="${esc(p.first_name)}" required>`)}${field('f2', 'Nom', `<input id="f2" name="last_name" value="${esc(p.last_name || '')}" required>`)}</div>
+    ${field('f3', 'Date de naissance', `<input id="f3" name="birth_date" type="date" value="${esc(p.birth_date || '')}">`)}
+    ${canManagePlayer(p) ? field('f6', 'Équipe principale', `<select id="f6" name="team_id">${S.teams.map((t) => `<option value="${t.id}" ${t.id === p.team_id ? 'selected' : ''}>${esc(t.name)}</option>`).join('')}</select>`) : ''}
+    ${hid ? '' : `<div class="kick">Contact d'urgence</div><div class="grid2">${field('f4', 'Prénom', `<input id="f4" name="em_first" value="${esc(em[0] || '')}">`)}${field('f4b', 'Nom', `<input id="f4b" name="em_last" value="${esc(em.slice(1).join(' '))}">`)}</div>
+    ${field('f5', "Téléphone d'urgence", `<input id="f5" name="emergency_phone" type="tel" value="${esc(p.emergency_phone || '')}">`)}`}
+    <p class="note">Ne saisis aucune information médicale (maladie, allergie, traitement).</p><button class="btn main" type="submit">Enregistrer</button></form>`;
+  } else if (!hid) h += `<div class="card"><div>Contact d'urgence : ${esc(p.emergency_name || '—')} ${esc(p.emergency_phone || '')}</div></div>`;
+  if (p.emergency_phone && !ed) h += `<a class="btn" href="tel:${esc(tel(p.emergency_phone))}">${icon('phone', 20)}Appeler le contact d'urgence</a>`;
+  // contact importé et invitation
+  if ((p.parent_email || p.parent_phone) && (canManagePlayer(p) || isParentOf(p.id))) {
+    const c0 = club(), inv = `Bonjour, ${c0.name} utilise ${BRAND.name} pour les convocations et les messages. Ouvre ${location.href.split('#')[0]}, crée ton compte puis « Rejoindre un club » avec le code ${c0.join_code} et le rôle « Parent de joueur » pour ${p.first_name}.`;
+    h += `<div class="card"><div class="kick">Contact du parent (importé)</div><div class="det">${esc(p.parent_email || '')}${p.parent_email && p.parent_phone ? ' · ' : ''}${esc(p.parent_phone || '')}</div>${par.length ? '' : `<div class="btns">${p.parent_email ? `<a class="btn small ghost" href="mailto:${esc(p.parent_email)}?subject=${encodeURIComponent(BRAND.name + ' · ' + c0.name)}&body=${encodeURIComponent(inv)}">${icon('mail', 18)}Inviter par e-mail</a>` : ''}${p.parent_phone ? `<a class="btn small ghost" href="sms:${esc(tel(p.parent_phone))}?body=${encodeURIComponent(inv)}">${icon('sms', 18)}Inviter par SMS</a><a class="btn small ghost" href="tel:${esc(tel(p.parent_phone))}">${icon('phone', 18)}Appeler</a>` : ''}</div>`}</div>`;
+  }
+  // parents
+  h += `<div class="sec"><h2>Parents reliés</h2><span class="det">${par.length}</span></div><div class="card"><div class="list">${par.length ? par.map((u) => { const t = S.phones[u]; return `<div class="row static"><span class="g">${esc(name(u))}<small>${esc(t || 'Téléphone non renseigné')}</small></span>${t && u !== S.me.id ? `<a class="btn small ghost" href="tel:${esc(tel(t))}">${icon('phone', 18)}Appeler</a>` : ''}${isBoard() && u !== S.me.id ? `<button class="btn small ghost" data-act="member" data-id="${u}">Fiche</button>` : ''}</div>`; }).join('') : '<p class="empty">Aucun parent relié.</p>'}</div>${par.length < 2 && !p.user_id ? '<p class="note">Second parent : il rejoint le club avec le rôle « Parent de joueur » et le nom de l’enfant ; à la validation, sa demande est reliée à cette fiche.</p>' : ''}</div>`;
+  // autorisations
+  h += inviteBlock(p);
+  h += `<div class="sec"><h2>Autorisations</h2></div><div class="card"><div class="list">${CONSENTS.filter(([k]) => !(isMajor(p) && k === 'alone')).map(([k, l]) => {
+    if (k === 'transport' && isMajor(p)) l = 'Covoiturage';
+    const v = c[k] || {}, sub = k === 'image' && v.conflict ? 'Les parents ne sont pas d’accord : le refus s’applique' + (v.at ? ' · ' + new Date(v.at).toLocaleDateString('fr-FR') : '') : v.at ? (v.ok ? 'Accordé' : 'Retiré') + ' le ' + new Date(v.at).toLocaleDateString('fr-FR') : 'Pas encore renseigné', pill = `<span class="pill ${v.ok ? 'ok' : 'ko'}">${v.ok ? 'Oui' : 'Non'}</span>`;
+    return cons ? `<button class="row" data-act="consent" data-id="${pid}" data-k="${k}" aria-pressed="${!!v.ok}"><span class="g">${l}<small>${sub}</small></span>${pill}</button>` : `<div class="row static"><span class="g">${l}<small>${sub}</small></span>${pill}</div>`;
+  }).join('')}</div></div>${cons ? '<p class="note">Touche une ligne pour accorder ou retirer. La date est enregistrée.</p>' : ''}<p class="note">${isMajor(p) ? 'Joueur majeur : il donne lui-même ses autorisations.' : 'Joueur mineur : les autorisations sont données par un parent' + (p.birth_date ? '.' : ' (date de naissance à compléter).')}</p>`;
+  // licence et cotisation
+  h += '<div class="sec" id="pl-lic"><h2>Licence et cotisation</h2></div>'; // n° 140 : arrivée des pastilles
+  // n° 33 : montant dû calculé (grille − réduction), versements, pastille « Payé »
+  const A = a || {}, due = A.fee_amount, paid = +A.fee_paid || 0, rest = due == null ? null : Math.max(0, due - paid), pays = S.payments.filter((x) => x.player_id === pid);
+  // 4.4.0 (n° 114) : le Secrétariat et le contact licences voient la licence, pas les montants
+  if (A.nofee) {
+    h += `<div class="card"><div class="chips">${statusPills(p)}</div>${A.licence_number ? `<div class="det">Licence n° ${esc(A.licence_number)}</div>` : ''}<p class="note" style="margin:0">Les montants de la cotisation sont réservés à la trésorerie et au président.</p></div>`;
+    if (canAdminPlayer(p)) h += licForm(pid, A, false);
+    if (canAdminPlayer(p)) h += delBtn('pdel', pid, 'Mettre la fiche à la corbeille', 'Confirmer : la fiche part à la corbeille (30 jours)', isArmed('p' + pid)) + accBtn(p);
+    return h;
+  }
+  h += `<div class="card"><div class="chips">${statusPills(p)}</div>${A.licence_number ? `<div class="det">Licence n° ${esc(A.licence_number)}</div>` : ''}
+  <div class="grid2" style="grid-template-columns:repeat(3,minmax(0,1fr))"><div><div class="kick">Dû</div><b class="big" style="font-size:24px">${eur(due)}</b></div><div><div class="kick">Réglé</div><b class="big" style="font-size:24px">${eur(paid)}</b></div><div><div class="kick">Reste</div><b class="big" style="font-size:24px">${eur(rest)}</b></div></div>
+  ${due == null ? '<p class="note">Montant dû inconnu : le tarif de la catégorie ou de l’équipe n’est pas encore dans la grille du club.</p>' : ''}
+  ${pays.length ? `<div class="list">${pays.map((x) => `<div class="row static"><span class="g">${eur(x.amount)}<small>${new Date(x.paid_at).toLocaleDateString('fr-FR')}${x.method ? ' · ' + esc(x.method) : ''}</small></span>${canAdminPlayer(p) ? `<button class="pill ${isArmed('pay' + x.id) ? 'armed' : ''}" data-act="paydel" data-id="${x.id}">${isArmed('pay' + x.id) ? 'Confirmer le retrait' : 'Retirer'}</button>` : ''}</div>`).join('')}</div>` : ''}</div>`;
+  if (hooks.attestBtn) h += hooks.attestBtn(p); // 5.5.0 · n° 164 : justificatif d'adhésion
+  if (canAdminPlayer(p)) {
+    const D = S.discounts.find((x) => x.player_id === pid) || {};
+    h += `<form id="payf" data-id="${pid}" class="card"><div class="kick">Ajouter un versement</div><div class="grid2">${field('pa1', 'Montant (€)', `<input id="pa1" name="amount" type="number" step="0.01" min="0.01" inputmode="decimal" required value="${rest ? rest : ''}">`)}${field('pa2', 'Moyen', `<select id="pa2" name="method"><option value="">—</option>${PAY.map((x) => `<option>${x}</option>`).join('')}</select>`)}</div><button class="btn main" type="submit">Ajouter le versement</button>
+    ${due != null && rest > 0 ? `<button type="button" class="btn ghost ${isArmed('paid' + pid) ? 'ink' : ''}" data-act="paid" data-id="${pid}">${isArmed('paid' + pid) ? `Confirmer : payé (${eur(rest)} enregistrés)` : 'Valider « Payé » en une fois'}</button>` : ''}
+    ${pays.length ? `<button type="button" class="btn danger ${isArmed('unpaid' + pid) ? 'armed' : ''}" data-act="unpaid" data-id="${pid}">${isArmed('unpaid' + pid) ? 'Confirmer : retirer tous les versements' : 'Repasser en « À payer »'}</button>` : ''}</form>
+    ${licForm(pid, A, hasArea('tresorerie'), D)}`;
+  } else if (board) h += '<p class="note">Cette fiche appartient à quelqu’un de ton niveau ou au-dessus : seul un rang supérieur peut la modifier.</p>';
+  if (canAdminPlayer(p)) h += delBtn('pdel', pid, 'Mettre la fiche à la corbeille', 'Confirmer : la fiche part à la corbeille (30 jours)', isArmed('p' + pid)) + accBtn(p);
+  return h;
+}
+
+Object.assign(ACTIONS, {
+  // n° 138 et 140 : aller à la rubrique de la fiche (versement, licence, certificat) ; sans droit d'y modifier, la carte de lecture
+  pljump: (el, d) => {
+    const t = (d.k === 'cotis' && document.getElementById('payf')) || (d.k !== 'cotis' && document.getElementById('padminf')) || document.getElementById('pl-lic');
+    if (!t) return;
+    t.scrollIntoView({ block: 'start', behavior: 'smooth' });
+    const f = d.k === 'certif' ? t.querySelector('[name=health_doc]') : d.k === 'lic' ? t.querySelector('[name=licence_state]') : t.querySelector('[name=amount]');
+    if (f) setTimeout(() => f.focus({ preventScroll: true }), 300);
+  },
+  plclub: async (el, d) => { const p = pl(d.id), v = d.v === '1'; if (await run(sb.from('players').update({ from_partner: v }).eq('id', d.id), v ? 'Joueur noté au club partenaire.' : 'Joueur noté à notre club.')) { p.from_partner = v; render(true); } },
+  player: (el, d) => { S.view = { type: 'player', id: d.id }; render(); },
+  tsplayer: (el, d) => { const p = pl(d.id); if (!p) return; S.tsp = p.team_id; S.noStack = true; render(true); }, // n° 113
+  consent: async (el, d) => {
+    const p = pl(d.id);
+    if (d.k === 'image') { // 4.10.0 · n° 183 : chaque parent a son choix ; dès qu'un parent refuse, le refus s'applique (calculé par la base)
+      const mine = ((p.consents?.image || {}).votes || {})[S.me.id], on = mine ? !!mine.ok : !!(p.consents?.image || {}).ok;
+      if (await run(sb.rpc('set_player_image', { p_player: p.id, p_ok: !on }), !on ? 'Accord enregistré.' : 'Refus enregistré.')) await refresh();
+      return;
+    }
+    const c = { ...(p.consents || {}) }, cur = !!(c[d.k] || {}).ok;
+    c[d.k] = { ok: !cur, at: new Date().toISOString(), by: S.me.id };
+    if (await run(sb.from('players').update({ consents: c }).eq('id', p.id))) { p.consents = c; render(true); }
+  },
+  paydel: async (el, d) => { if (!armed('pay' + d.id)) return; if (await run(sb.from('player_payments').delete().eq('id', d.id), 'Versement retiré.')) await refresh(); },
+  paid: async (el, d) => { if (!armed('paid' + d.id)) return; if (await run(sb.rpc('mark_paid', { p_player: d.id, p_paid: true }), 'Cotisation payée.')) await refresh(); },
+  unpaid: async (el, d) => { if (!armed('unpaid' + d.id)) return; if (await run(sb.rpc('mark_paid', { p_player: d.id, p_paid: false }), 'Cotisation repassée en « À payer ».')) await refresh(); },
+  pacc: async (el, d) => { if (!armed('pacc' + d.id)) return; if (await run(sb.rpc('trash_player_account', { p_player: d.id }), 'Accès retiré. Fiche à la corbeille : restaurable pendant 30 jours (onglet Club), l’accès revient avec.')) { backAfterDelete('player', d.id); await refresh(); } },
+  pdel: async (el, d) => { if (!armed('p' + d.id)) return; if (await run(sb.rpc('trash_item', { p_kind: 'player', p_id: d.id }), 'Fiche mise à la corbeille. Restaurable pendant 30 jours (onglet Club).')) { backAfterDelete('player', d.id); await refresh(); } },
+});
+Object.assign(FORMS, {
+  pinvf: async (v, f) => {
+    const id = f.dataset.id, r = await sb.rpc('invite_parent', { p_player: id, p_email: v.email });
+    if (r?.error) return toast(r.error.message || 'Invitation impossible');
+    const m = await sb.functions.invoke('envoyer-email', { body: { parent_invite: { id: r.data } } });
+    if (m?.error) return toast('L’invitation est enregistrée mais l’e-mail n’est pas parti : réessaie plus tard.');
+    S.invSent = true; toast('Invitation envoyée.'); render(true);
+  },
+  plf: async (v, f) => {
+    if (!v.first_name.trim() || !(v.last_name || '').trim()) return toast('Le prénom et le nom sont obligatoires.');
+    const em = ((v.em_first || '').trim() + ' ' + (v.em_last || '').trim()).trim();
+    const row = { first_name: v.first_name.trim(), last_name: v.last_name.trim(), birth_date: v.birth_date || null };
+    if (v.em_first !== undefined) Object.assign(row, { emergency_name: em || null, emergency_phone: (v.emergency_phone || '').trim() || null }); // 4.4.0 : rien n'est effacé quand le contact est masqué
+    if (v.team_id) row.team_id = v.team_id;
+    if (await run(sb.from('players').update(row).eq('id', f.dataset.id), 'Informations enregistrées.')) await refresh();
+  },
+  padminf: async (v, f) => {
+    const pid = f.dataset.id;
+    if (!await run(sb.rpc('set_licence', { p_player: pid, p_state: v.licence_state, p_number: (v.licence_number || '').trim() || null, p_health: !!v.health_doc }))) return;
+    const disc = num(v.disc) || 0, had = S.discounts.find((x) => x.player_id === pid);
+    if (v.disc === undefined) { toast('Licence enregistrée.'); await refresh(); return; }
+    if (disc || (v.disc_reason || '').trim() || had) { if (!await run(sb.from('player_discount').upsert({ player_id: pid, amount: disc, reason: (v.disc_reason || '').trim() || null, updated_by: S.me.id, updated_at: new Date().toISOString() }))) return; }
+    toast('Licence et réduction enregistrées.'); await refresh();
+  },
+  payf: async (v, f) => {
+    const amount = num(v.amount); if (!amount || amount <= 0) return toast('Indique un montant.');
+    if (await run(sb.from('player_payments').insert({ player_id: f.dataset.id, amount, method: v.method || null, created_by: S.me.id }), 'Versement de ' + eur(amount) + ' ajouté.')) await refresh();
+},
+});

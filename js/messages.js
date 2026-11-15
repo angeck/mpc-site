@@ -1,0 +1,210 @@
+// mypocketclub · messages : groupes d'échange, messages en direct, sondages (supprimables, restaurables par le bureau).
+import { annoncesBlock } from './vie.js';
+import { S, sb, esc, run, toast, render, refresh, armed, isArmed, ACTIONS, FORMS, INPUTS, CHANGES, ROLES, isBoard, isPresident, name, nick, teamName, fmtShort, loadGroup, parentsOf, playersOfTeam, plural, norm, hooks } from './core.js';
+import { backAfterDelete } from './core.js';
+import { icon, delBtn, field } from './ui.js';
+
+export const grp = (id) => S.groups.find((g) => g.id === id);
+export function scrollEnd() { setTimeout(() => window.scrollTo(0, document.body.scrollHeight), 30); }
+
+// N° 50 : groupes triés par dernier message (ou sondage), le plus récent en haut
+const lastAt = (g) => g.last_message_at || g.created_at;
+export const sortedGroups = () => S.groups.slice().sort((a, b) => (lastAt(a) < lastAt(b) ? 1 : lastAt(a) > lastAt(b) ? -1 : 0));
+function when(iso) {
+  const d = new Date(iso), t = new Date();
+  if (d.toDateString() === t.toDateString()) return d.getHours() + ' h ' + String(d.getMinutes()).padStart(2, '0');
+  const y = new Date(t); y.setDate(t.getDate() - 1); if (d.toDateString() === y.toDateString()) return 'Hier';
+  return d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' });
+}
+// Le groupe remonte en haut dès qu'un message y arrive (reçu ou envoyé)
+export function bump(m, kind = 'message') {
+  const g = grp(m.group_id); if (!g) return;
+  g.last_message_at = m.created_at; S.previews[m.group_id] = { group_id: m.group_id, user_id: m.user_id ?? m.created_by, body: m.body ?? m.question, created_at: m.created_at, kind };
+}
+// n° 186 : le président voit les messages qu'on lui a signalés (ce message seulement, jamais le groupe)
+function reportsBlock() {
+  if (!isPresident()) return '';
+  if (S.reports === undefined) { S.reports = []; sb.rpc('reported_messages', { p_club: S.clubId }).then(({ data }) => { S.reports = (data || []).filter((r) => !r.handled_at); if (S.reports.length) render(true); }, () => {}); }
+  if (!S.reports.length) return '';
+  return `<div class="sec"><h2>Messages signalés (${S.reports.length})</h2></div><div class="card">${S.reports.map((r) => `<div class="row" style="align-items:flex-start"><span class="g"><b>${esc(r.group_name || 'Groupe')}</b><small>${esc(nick(r.author))} : ${esc(r.body || '')}</small>${r.reason ? `<small>Motif : ${esc(r.reason)}</small>` : ''}<small>Signalé par ${esc(nick(r.reporter))} · ${esc(fmtShort(r.created_at))}</small></span><span style="display:flex;flex-direction:column;gap:6px;align-items:flex-end"><button class="chip" data-act="repdone" data-id="${r.report_id}">Traité</button>${r.forwarded_at ? '<span class="pill ok">Transmis</span>' : `<button class="chip" data-act="repfwd" data-id="${r.report_id}">Transmettre à mypocketclub</button>`}</span></div>`).join('')}<p class="note">« Transmettre » envoie ce message seul (pas la conversation) à l’équipe de mypocketclub, pour un cas grave.</p></div>`;
+}
+export function messagesTab() {
+  let h = annoncesBlock() + reportsBlock() + (hooks.grpReqBlock ? hooks.grpReqBlock() : '') + `<div class="sec"><h2>Groupes d'échange</h2></div><button class="btn main" data-act="gnew">${icon('plus', 20)}Créer un groupe d'échange</button>`;
+  h += `<div class="card"><div class="list">${S.groups.length ? sortedGroups().map((g) => {
+    const p = S.previews[g.id], n = S.unread[g.id] || 0;
+    const line = p ? (p.kind === 'sondage' ? 'Sondage : ' : (p.user_id === S.me.id ? 'Toi' : esc(nick(p.user_id)).split(' ')[0]) + ' : ') + esc(String(p.body).slice(0, 70)) : 'Pas encore de message';
+    return `<button class="row" data-act="group" data-id="${g.id}"><span class="avatar">${icon('msg', 20)}</span><span class="g"><span style="display:flex;gap:8px;align-items:baseline"><span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap${n ? ';font-weight:800' : ''}">${esc(g.name)}</span><small style="flex:none">${esc(when(lastAt(g)))}</small></span><small style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${line}</small></span>${n ? `<span class="unread" aria-label="${n} non lus">${n}</span>` : '<span class="chev"></span>'}</button>`;
+  }).join('') : '<p class="empty">Tu ne fais partie d’aucun groupe pour l’instant.</p>'}</div></div>`;
+  return h + '<p class="note">Les groupes remplacent WhatsApp : covoiturage, organisation, sondages. Seuls les membres invités les voient.</p>';
+}
+
+// 5.15.0 · n° 238 : équipes auxquelles on est lié (son profil d'équipe, sa fiche, la fiche de son enfant)
+const myTeams = () => new Set([...S.mems.filter((m) => m.club_id === S.clubId && m.status === 'active' && m.team_id).map((m) => m.team_id),
+  ...(S.players || []).filter((p) => !p.deleted_at && p.team_id && (p.user_id === S.me.id || parentsOf(p.id).includes(S.me.id))).map((p) => p.team_id)]);
+async function loadContacts() {
+  const { data, error } = await sb.rpc('contact_people', { p_club: S.clubId });
+  if (error || !Array.isArray(data)) {   // base pas encore à jour (script 5.15.0) : on garde l'ancienne liste
+    S.contacts = [...new Map(S.members.filter((m) => m.status === 'active' && m.user_id !== S.me.id).map((m) => [m.user_id, m])).values()];
+  } else {
+    S.contacts = data;
+    S.contacts.forEach((x) => { if (!S.names[x.user_id]) S.names[x.user_id] = (x.first_name + ' ' + (x.last_name || '')).trim(); });
+  }
+  if (S.view?.type === 'gform') render(true);
+}
+export function groupForm() {
+  if (!S.form) S.form = S.grqForm?.prev || { name: '', sel: new Set(), q: '' };   // 5.4.0 : retour depuis « Ajouter un parent »
+  const f = S.form;
+  // 5.15.0 · n° 238 : la liste vient de la base (contact_people) : les personnes avec qui on a un lien ; la base le revérifie à l'invitation
+  if (S.contacts === undefined) { S.contacts = null; loadContacts(); }
+  const people = (S.contacts || []).slice().sort((a, b) => name(a.user_id).localeCompare(name(b.user_id), 'fr'));
+  const teams = isBoard() ? S.teams : S.teams.filter((t) => myTeams().has(t.id));
+  const q = norm(f.q), shown = people.filter((m) => !q || norm(name(m.user_id)).includes(q));
+  return `<div class="card lift">
+  ${field('gn', 'Nom du groupe', `<input id="gn" data-f="name" value="${esc(f.name || '')}" maxlength="80" placeholder="Ex. U9 · Parents et coachs">`)}
+  <div class="kick">Ajouter d'un coup</div><div class="chips">${teams.map((t) => `<button class="chip" data-act="gteam" data-id="${t.id}">${esc(t.name)}</button>`).join('')}<button class="chip" data-act="gstaff">${isBoard() || S.contacts?.some((m) => m.role === 'coach' && !myTeams().has(m.team_id)) ? 'Président, bureau et coachs' : 'Président, bureau et coachs de mon équipe'}</button></div>
+  ${field('gq', `Membres invités (${f.sel.size})`, `<input id="gq" type="search" data-gq="1" value="${esc(f.q || '')}" placeholder="Rechercher un nom">`)}
+  <div class="card flat" style="max-height:360px;overflow:auto;gap:0">${S.contacts === null ? '<p class="det">Chargement…</p>' : shown.length ? shown.map((m) => `<label class="check" style="padding:6px 0"><input type="checkbox" data-gsel="${m.user_id}" ${f.sel.has(m.user_id) ? 'checked' : ''}><span>${esc(name(m.user_id))} <span class="det">· ${ROLES[m.role] || ''}${m.team_id ? ' ' + esc(teamName(m.team_id)) : ''}</span></span></label>`).join('') : '<p class="empty">Aucun autre membre pour le moment.</p>'}</div>
+  <button class="btn main" data-act="gcreate">Créer le groupe</button></div>`;
+}
+
+const canDelPoll = (p) => p.created_by === S.me.id || isBoard() || grp(p.group_id)?.created_by === S.me.id;
+function pollCard(p) {
+  if (p.deleted_at) return `<div class="card flat"><div class="det">Sondage « ${esc(p.question)} » supprimé par ${esc(name(p.deleted_by))}.</div>${isBoard() || canDelPoll(p) ? `<button class="btn small ghost" data-act="pollrestore" data-id="${p.id}">Restaurer (30 jours)</button>` : ''}</div>`;
+  const v = S.votes.filter((x) => x.poll_id === p.id), my = (v.find((x) => x.user_id === S.me.id) || {}).answer, k = 'poll' + p.id;
+  return `<div class="card yellow" style="transform:none"><div style="display:flex;align-items:center;gap:8px"><span class="kick" style="flex:1;color:var(--pc-texte-ecran)">Sondage · ${esc(nick(p.created_by))}</span>${canDelPoll(p) ? `<button class="pill ${isArmed(k) ? 'armed' : ''}" data-act="polldel" data-id="${p.id}" aria-label="Supprimer le sondage">${isArmed(k) ? 'Confirmer la suppression' : icon('trash', 16)}</button>` : ''}</div><b style="font-size:18px">${esc(p.question)}</b>
+  <div class="chips">${['Présent', 'Absent', 'Je ne sais pas'].map((a) => `<button class="chip" data-act="vote" data-id="${p.id}" data-v="${a}" aria-pressed="${my === a}" style="${my === a ? 'background:var(--pc-encre);color:#FFFFFF;border-color:var(--pc-encre)' : 'background:#FFFFFF;border-color:#FFFFFF'}">${a} · ${v.filter((x) => x.answer === a).length}</button>`).join('')}</div><div class="det">${plural(v.length, 'réponse')} sur ${S.gmembers.length}</div></div>`;
+}
+
+// ---------- N° 83 · pièces jointes ; n° 84 · transférer un message ----------
+const ATT_MAX = 10 * 1024 * 1024, ATT_N = 5;
+const ATT_ACCEPT = '.pdf,image/*,.doc,.docx,.xls,.xlsx,.txt';
+const safeName = (n) => String(n || 'fichier').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^\w.-]+/g, '_').slice(-80);
+async function uploadFiles(groupId, list) {
+  const out = [];
+  for (const f of list) {
+    const path = `${groupId}/${crypto.randomUUID()}-${safeName(f.name)}`;
+    const { error } = await sb.storage.from('message-files').upload(path, f, { contentType: f.type || 'application/octet-stream', upsert: false });
+    if (error) { toast(`Envoi impossible pour « ${f.name} » : type de fichier ou taille refusés.`); return null; }
+    out.push({ path, name: String(f.name).slice(0, 120), size: f.size, type: f.type || '' });
+  }
+  return out;
+}
+const kb = (n) => (n > 1048576 ? (n / 1048576).toFixed(1).replace('.', ',') + ' Mo' : Math.max(1, Math.round(n / 1024)) + ' Ko');
+function bubble(m) {
+  const mine = m.user_id === S.me.id, files = m.files || [];
+  const auto = files.length && m.body === '📎 ' + files.map((f) => f.name).join(', ').slice(0, 1990);
+  return `<div class="bub ${mine ? 'me' : ''}">${mine ? '' : `<div class="who">${esc(nick(m.user_id))}</div>`}${m.forwarded_by ? `<div class="fwd">Transféré par ${esc(mine ? 'toi' : nick(m.user_id))} · message de ${esc(m.forwarded_by)}</div>` : ''}${auto ? '' : `<div>${esc(m.body)}</div>`}
+  ${files.map((f) => `<button type="button" class="file" data-act="msgfile" data-path="${esc(f.path)}" data-name="${esc(f.name)}">📎 <span>${esc(f.name)}</span> <small>${kb(f.size || 0)}</small></button>`).join('')}
+  <div class="when">${esc(fmtShort(m.created_at))} · <button type="button" class="linkbtn" data-act="msgfwd" data-id="${m.id}">Transférer</button>${mine ? '' : ` · <button type="button" class="linkbtn" data-act="msgrep" data-id="${m.id}">Signaler</button>`}</div></div>`;
+}
+export function forwardPage() {
+  const m = S.fwd; if (!m) return '<p class="empty">Message introuvable.</p>';
+  const gs = (S.groups || []).filter((g) => g.id !== m.group_id);
+  return `<div class="card flat"><div class="kick">Message à transférer</div><div>${esc(m.body)}</div>${(m.files || []).length ? `<div class="det">${plural(m.files.length, 'pièce jointe', 'pièces jointes')}</div>` : ''}</div>
+  <p class="note">Choisis le groupe qui le recevra. Ses membres verront « Transféré par » avec ton nom et l’auteur du message.</p>
+  <div class="list">${gs.map((g) => `<button class="row" data-act="fwdto" data-id="${g.id}"><span class="g">${esc(g.name)}</span><span class="pill blue">Envoyer</span></button>`).join('') || '<p class="empty">Aucun autre groupe. Crée d’abord un groupe avec les personnes choisies.</p>'}</div>`;
+}
+
+export function groupPage(id) {
+  const g = grp(id); if (!g) return '<p class="empty">Groupe introuvable.</p>';
+  const mine = S.gmembers.find((x) => x.user_id === S.me.id);
+  let h = `<details class="card"><summary>${plural(S.gmembers.length, 'membre')}</summary><div class="det">${S.gmembers.map((x) => esc(name(x.user_id))).join(', ')}</div></details>`;
+  h += S.polls.map(pollCard).join('');
+  h += '<div class="msgs">' + (S.msgs.length ? S.msgs.map(bubble).join('') : '<p class="empty">Écris le premier message.</p>') + '</div>';
+  h += (S.msgatt || []).length ? `<div class="chips attlist">${S.msgatt.map((f, i) => `<span class="pill">📎 ${esc(f.name)} <button type="button" class="linkbtn" data-act="attrm" data-i="${i}" aria-label="Retirer ${esc(f.name)}">✕</button></span>`).join('')}</div>` : '';
+  h += `<form id="msgf" class="compose"><label class="roundbtn attbtn" aria-label="Joindre un fichier">📎<input type="file" multiple accept="${ATT_ACCEPT}" data-att="1" hidden></label><input name="body" placeholder="Ton message" autocomplete="off" maxlength="2000" aria-label="Message"><button class="btn main small" type="submit">Envoyer</button></form>`;
+  h += `<div class="chips"><button class="chip" data-act="pollnew">${icon('plus', 16)} Sondage</button><button class="chip" data-act="gmute" aria-pressed="${!!mine?.muted}">${mine?.muted ? 'Notifications coupées' : 'Couper les notifications'}</button>${g.created_by === S.me.id ? '' : '<button class="chip" data-act="gleave">Quitter le groupe</button>'}</div>`;
+  if (g.created_by === S.me.id || isBoard()) h += delBtn('gdel', id, 'Supprimer le groupe', 'Confirmer : supprimer le groupe et ses messages', isArmed('g' + id));
+  return h;
+}
+
+export async function openGroup(id) {
+  S.view = { type: 'group', id }; await loadGroup(id);
+  // n° 36 : le groupe ouvert est lu
+  { S.unread[id] = 0; sb.from('group_members').update({ last_read_at: new Date().toISOString() }).eq('group_id', id).eq('user_id', S.me.id).then(() => {}, () => {}); }
+  render(); scrollEnd();
+}
+
+Object.assign(ACTIONS, {
+  gnew: () => { S.form = { name: '', sel: new Set(), q: '' }; S.contacts = undefined; S.view = { type: 'gform' }; render(); },
+  gteam: (el, d) => {
+    S.form.team = S.form.team === undefined || S.form.team === d.id ? d.id : null;   // n° 186 : une seule équipe = groupe d'équipe
+    S.members.filter((m) => m.status === 'active' && m.team_id === d.id && m.user_id !== S.me.id).forEach((m) => S.form.sel.add(m.user_id));
+    (S.contacts || []).filter((m) => m.team_id === d.id).forEach((m) => S.form.sel.add(m.user_id)); // 5.15.0 · n° 238
+    playersOfTeam(d.id).forEach((p) => { if (p.user_id && p.user_id !== S.me.id) S.form.sel.add(p.user_id); parentsOf(p.id).filter((u) => u !== S.me.id).forEach((u) => S.form.sel.add(u)); });
+    render(true);
+  },
+  gstaff: () => { (S.contacts || []).filter((m) => ['president', 'bureau', 'coach'].includes(m.role)).forEach((m) => S.form.sel.add(m.user_id)); render(true); },
+  gcreate: async () => {
+    const nm = (S.form.name || '').trim(); if (!nm) return toast('Donne un nom au groupe.');
+    // n° 186 : groupe d'équipe seulement si tout le monde en est (la base re-vérifie) ; sinon groupe libre
+    const t = S.form.team, inTeam = (u) => t && (S.members.some((m) => m.user_id === u && m.status === 'active' && (m.team_id === t || ['president', 'bureau'].includes(m.role)))
+      || playersOfTeam(t).some((p) => p.user_id === u || parentsOf(p.id).includes(u)));
+    const asTeam = t && [S.me.id, ...S.form.sel].every(inTeam);
+    // 5.4.0 · n° 201 : un mineur sans son parent → l'écran propose d'ajouter le parent ; la conversation attendra son accord
+    if (!asTeam && hooks.minorStep && await hooks.minorStep(nm, [...S.form.sel])) return;
+    const g = await run(sb.from('groups').insert({ club_id: S.clubId, name: nm, created_by: S.me.id, ...(asTeam ? { team_id: t } : {}) }).select().single()); if (!g) return;
+    const ids = [S.me.id, ...S.form.sel];
+    if (await run(sb.from('group_members').insert(ids.map((u) => ({ group_id: g.id, user_id: u }))), 'Groupe créé.')) { S.groups.unshift(g); S.form = null; await openGroup(g.id); }
+    else await sb.from('groups').delete().eq('id', g.id);   // refusé par les règles : pas de groupe vide qui traîne
+  },
+  group: (el, d) => openGroup(d.id),
+  attrm: (el, d) => { S.msgatt.splice(+d.i, 1); render(true); },
+  msgfile: async (el, d) => {
+    const w = window.open('', '_blank');
+    const { data, error } = await sb.storage.from('message-files').createSignedUrl(d.path, 300, { download: false });
+    if (error || !data?.signedUrl) { w?.close(); return toast('Fichier introuvable ou plus disponible.'); }
+    if (w) w.location = data.signedUrl; else location.href = data.signedUrl;
+  },
+  msgrep: async (el, d) => { if (await run(sb.rpc('report_message', { p_message: +d.id, p_reason: null }), 'Merci : le président a été prévenu.')) render(true); },
+  repfwd: async (el, d) => { if (await run(sb.rpc('forward_report', { p_report: d.id }), 'Message transmis à mypocketclub.')) { const r = (S.reports || []).find((x) => x.report_id === d.id); if (r) r.forwarded_at = new Date().toISOString(); render(true); } }, // 5.6.0 · n° 202
+  repdone: async (el, d) => { if (await run(sb.from('message_reports').update({ handled_at: new Date().toISOString(), handled_by: S.me.id }).eq('id', d.id))) { S.reports = (S.reports || []).filter((r) => r.report_id !== d.id); render(true); } },
+  msgfwd: (el, d) => { const m = S.msgs.find((x) => String(x.id) === String(d.id)); if (!m) return; S.fwd = m; S.stack = (S.stack || []).concat([S.view]); S.view = { type: 'msgfwd' }; render(); },
+  fwdto: async (el, d) => {
+    const m = S.fwd; if (!m) return;
+    const files = [];
+    for (const f of m.files || []) {   // copie dans le dossier du groupe qui reçoit (ses membres seuls la liront)
+      const path = `${d.id}/${crypto.randomUUID()}-${safeName(f.name)}`;
+      const { error } = await sb.storage.from('message-files').copy(f.path, path);
+      if (error) return toast(`Copie impossible pour « ${f.name} ».`);
+      files.push({ ...f, path });
+    }
+    const origin = m.forwarded_by || nick(m.user_id);
+    const r = await run(sb.from('messages').insert({ group_id: d.id, user_id: S.me.id, body: m.body, files, forwarded_by: String(origin).slice(0, 120) }).select().single(), 'Message transféré.');
+    if (r) { bump(r); S.fwd = null; await openGroup(d.id); }
+  },
+  pollnew: async () => {
+    const q = prompt('Question du sondage (ex. Plateau samedi 7 novembre ?)'); if (!q || !q.trim()) return;
+    const pl = await run(sb.from('polls').insert({ group_id: S.view.id, question: q.trim().slice(0, 200), created_by: S.me.id }).select().single(), 'Sondage publié.');
+    if (pl) { bump(pl, 'sondage'); await loadGroup(S.view.id); render(true); }
+  },
+  vote: async (el, d) => { if (await run(sb.from('poll_votes').upsert({ poll_id: d.id, user_id: S.me.id, answer: d.v }))) { await loadGroup(S.view.id); render(true); } },
+  polldel: async (el, d) => { if (!armed('poll' + d.id)) return; if (await run(sb.rpc('trash_item', { p_kind: 'poll', p_id: d.id }), 'Sondage supprimé (restaurable pendant 30 jours).')) { await loadGroup(S.view.id); render(true); } },
+  pollrestore: async (el, d) => { if (await run(sb.rpc('restore_item', { p_kind: 'poll', p_id: d.id }), 'Sondage restauré.')) { await loadGroup(S.view.id); render(true); } },
+  gmute: async () => { const mine = S.gmembers.find((x) => x.user_id === S.me.id); if (mine && await run(sb.from('group_members').update({ muted: !mine.muted }).eq('group_id', S.view.id).eq('user_id', S.me.id))) { mine.muted = !mine.muted; render(true); } },
+  gleave: async () => { if (await run(sb.from('group_members').delete().eq('group_id', S.view.id).eq('user_id', S.me.id), 'Tu as quitté le groupe.')) { backAfterDelete('group', S.view.id); await refresh(); } },
+  gdel: async (el, d) => { if (!armed('g' + d.id)) return; if (await run(sb.from('groups').delete().eq('id', d.id), 'Groupe supprimé.')) { backAfterDelete('group', d.id); await refresh(); } },
+});
+FORMS.msgf = async (v) => {
+  const att = S.msgatt || [], txt = (v.body || '').trim(); if (!txt && !att.length) return;
+  let files = [];
+  if (att.length) { toast('Envoi des pièces jointes…'); files = await uploadFiles(S.view.id, att); if (!files) return; }
+  const body = txt || '📎 ' + files.map((f) => f.name).join(', ').slice(0, 1990);
+  const m = await run(sb.from('messages').insert({ group_id: S.view.id, user_id: S.me.id, body, files }).select().single());
+  if (m) S.msgatt = [];
+  if (m) { if (!S.msgs.some((x) => x.id === m.id)) S.msgs.push(m); S.lastMsgs.unshift(m); bump(m); render(true); scrollEnd(); document.querySelector('#msgf input[name=body]')?.focus(); }
+};
+INPUTS.push((t) => {
+  if (t.dataset.f && S.form) { S.form[t.dataset.f] = t.value; return true; }
+  if (t.dataset.gq) { S.form.q = t.value; const pos = t.selectionStart; render(true); const n = document.getElementById('gq'); if (n) { n.focus(); try { n.setSelectionRange(pos, pos); } catch { /* */ } } return true; }
+  return false;
+});
+CHANGES.push((t) => {   // n° 83 : fichiers choisis (5 au plus, 10 Mo chacun)
+  if (!t.dataset.att) return false;
+  const add = [...(t.files || [])], big = add.find((f) => f.size > ATT_MAX);
+  if (big) toast(`« ${big.name} » est trop lourd : 10 Mo maximum.`);
+  S.msgatt = (S.msgatt || []).concat(add.filter((f) => f.size <= ATT_MAX)).slice(0, ATT_N);
+  if ((S.msgatt.length) === ATT_N) toast('5 pièces jointes au plus par message.');
+  t.value = ''; render(true); return true;
+});
+CHANGES.push((t) => { if (t.dataset.gsel) { S.form.sel[t.checked ? 'add' : 'delete'](t.dataset.gsel); render(true); return true; } return false; });

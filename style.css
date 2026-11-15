@@ -1,0 +1,638 @@
+/* mypocketclub · styles (base alpha 3.0, logo mypocketclub n° 97 en 3.7.0)
+   Les couleurs, polices et formes viennent des jetons de la charte (04-jetons-design.css, conversation « Charte graphique »).
+   Ne pas inventer de nouvelles couleurs ici : ajouter un jeton dans la charte d'abord. */
+:root{
+  --pc-bleu:#2F5BFF; --pc-bleu-clair:#6B8BFF; --pc-jaune:#FFC93C; --pc-encre:#11162E; --pc-texte-doux:#4A5068;
+  --pc-fond:#F7F8FC; --pc-papier:#FFFFFF; --pc-trait:#D8DCEA; --pc-bleu-pale:#F4F6FF;
+  --pc-oui-fond:#C9F5E4; --pc-oui-texte:#0B5C43; --pc-non-fond:#FFE1DA; --pc-non-texte:#A52A12;
+  --pc-attente-fond:#FFF1D1; --pc-attente-texte:#8A5A00; --pc-neutre-fond:#EEF0F7;
+  --pc-titre:"Bricolage Grotesque",system-ui,sans-serif; --pc-texte:"DM Sans",system-ui,sans-serif;
+  --pc-rayon-carte:24px; --pc-rayon-bouton:28px; --pc-rayon-pastille:20px;
+  --pc-ombre:0 8px 22px rgba(17,22,46,.08); --pc-ombre-douce:0 4px 14px rgba(17,22,46,.06);
+  --pc-cible-min:48px; --pc-bouton-h:52px;
+  /* En-tête : bleu mypocketclub, ou couleur du club si le président l'a activée (écrit par l'application) */
+  --pc-entete:var(--pc-bleu); --pc-entete-texte:#FFFFFF;
+  /* Rôles (n° 168, charte 04-jetons-design.css) : valent les couleurs de base en clair, changent en sombre */
+  --pc-texte-ecran:var(--pc-encre); --pc-action:var(--pc-bleu); --pc-action-texte:#FFFFFF; --pc-entete-defaut:var(--pc-bleu);
+  --pc-aplat:#11162E; --pc-aplat-texte:#FFFFFF; --pc-jaune-pale:#FFF6DC; --pc-ligne:var(--pc-trait);
+}
+:root:not([data-theme="sombre"]){color-scheme:light}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="clair"]){
+    color-scheme:dark;
+    --pc-fond:#0E1120; --pc-papier:#1A1F36; --pc-trait:#2C3354; --pc-bleu-pale:#232A4A; --pc-neutre-fond:#2C3354;
+    --pc-texte-doux:#A9AFC9; --pc-texte-ecran:#F2F4FF; --pc-action:#6B8BFF; --pc-action-texte:#11162E; --pc-entete-defaut:#11162E;
+    --pc-oui-fond:#0F3D31; --pc-oui-texte:#8FE8C4; --pc-non-fond:#4A1D14; --pc-non-texte:#FFB4A3; --pc-attente-fond:#3D2F0A; --pc-attente-texte:#FFD98A;
+    --pc-aplat:#2C3354; --pc-jaune-pale:#3D2F0A; --pc-ombre:none; --pc-ombre-douce:none;
+  }
+}
+:root[data-theme="sombre"]{
+  color-scheme:dark;
+  --pc-fond:#0E1120; --pc-papier:#1A1F36; --pc-trait:#2C3354; --pc-bleu-pale:#232A4A; --pc-neutre-fond:#2C3354;
+  --pc-texte-doux:#A9AFC9; --pc-texte-ecran:#F2F4FF; --pc-action:#6B8BFF; --pc-action-texte:#11162E; --pc-entete-defaut:#11162E;
+  --pc-oui-fond:#0F3D31; --pc-oui-texte:#8FE8C4; --pc-non-fond:#4A1D14; --pc-non-texte:#FFB4A3; --pc-attente-fond:#3D2F0A; --pc-attente-texte:#FFD98A;
+  --pc-aplat:#2C3354; --pc-jaune-pale:#3D2F0A; --pc-ombre:none; --pc-ombre-douce:none;
+}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--pc-fond);color:var(--pc-texte-ecran);font-family:var(--pc-texte);font-size:16px;line-height:1.45;-webkit-text-size-adjust:100%}
+button,input,select,textarea{font:inherit;color:inherit}
+button{cursor:pointer}
+a{color:var(--pc-action)}
+:focus-visible{outline:3px solid var(--pc-action);outline-offset:2px}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+#app{max-width:560px;margin:0 auto;min-height:100vh;display:flex;flex-direction:column}
+
+/* ---------- Logos (n° 97 · charte mypocketclub, 04-jetons-design.css) ----------
+   « my » en étiquette (encre sur pastille jaune, inclinée de −5°), « pocket » encre avec le ballon dans le « o », « club » bleu, sans espace.
+   Sur l'en-tête bleu : « pocket » et « club » en blanc, liseré encre autour de la pastille. Sur fond encre : « club » bleu clair. */
+.wordmark{display:inline-flex;align-items:center;font-family:var(--pc-titre);font-weight:800;letter-spacing:-.04em;line-height:1;white-space:nowrap;color:var(--pc-encre)}
+.wordmark .my{display:inline-block;background:var(--pc-jaune);color:var(--pc-encre);border-radius:.2em;padding:0 .09em .12em;letter-spacing:-.03em;transform:rotate(-5deg);margin-right:.07em}
+.wordmark .pocket{display:inline-flex;align-items:center}
+.wordmark .ball{flex:none;width:.62em;height:.62em;margin:0 .02em}
+.wordmark .club{color:var(--pc-bleu)}
+.hd .wordmark{color:inherit}
+.hd .wordmark .club{color:inherit}
+.hd .wordmark .my{box-shadow:0 0 0 .035em var(--pc-encre)}
+/* Thème sombre : en-tête encre par défaut, logo de la version « fond encre » (pocket blanc, club bleu clair) ; seulement si le club n'a pas activé sa couleur */
+@media (prefers-color-scheme:dark){:root:not([data-theme="clair"]):not([data-club-perso="on"]) .hd .wordmark .club,:root:not([data-theme="clair"]):not([data-club-perso="on"]) .hdmini .wordmark .club{color:var(--pc-bleu-clair)}}
+:root[data-theme="sombre"]:not([data-club-perso="on"]) .hd .wordmark .club,:root[data-theme="sombre"]:not([data-club-perso="on"]) .hdmini .wordmark .club{color:var(--pc-bleu-clair)}
+.wordmark.ink .pocket{color:#FFFFFF}.wordmark.ink .club{color:var(--pc-bleu-clair)}
+.splash{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:40px 20px;text-align:center}
+.splash .wordmark{font-size:52px}
+.bigsplash{min-height:100vh;min-height:100dvh;background:#11162E}
+html.ouv,html.ouv body{background:#11162E;color:#FFFFFF}
+.bigsplash .wordmark{font-size:min(14vw,92px)}
+.splash p{margin:0;color:var(--pc-texte-doux);font-size:17px}
+
+/* ---------- En-tête ---------- */
+.hd{position:relative;overflow:hidden;background:var(--pc-entete);color:var(--pc-entete-texte);border-radius:0 0 32px 32px;padding:calc(14px + env(safe-area-inset-top)) 20px 22px;display:flex;flex-direction:column;gap:12px}
+.hd::before{content:"";position:absolute;right:-40px;top:-50px;width:160px;height:160px;border-radius:50%;background:rgba(255,255,255,.18);pointer-events:none}
+.hd>*{position:relative}
+.hd .band{display:flex;align-items:center;gap:10px;min-height:44px}
+.hd .band .logo{flex:1;min-width:0;display:flex;align-items:center;overflow:hidden}
+.hd .band .logo .wordmark{font-size:clamp(15px,5.1vw,22px)!important}
+.hd .top{display:flex;align-items:center;gap:12px;min-height:44px}
+.hd .who{display:flex;flex-direction:column;flex:1;min-width:0}
+.hd .who b{font-size:17px;line-height:1.2;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.hd .who span{font-size:14px;opacity:.92;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.hd .kicker{font-size:14px;font-weight:700;letter-spacing:.06em;text-transform:uppercase}
+.hd h1{margin:0;font-family:var(--pc-titre);font-weight:800;font-size:32px;line-height:1.02;letter-spacing:-.03em}
+.hd .tags{display:flex;gap:8px;flex-wrap:wrap}
+.hd .tags span{background:#FFFFFF;color:var(--pc-encre);font-weight:700;font-size:14px;padding:6px 12px;border-radius:18px}
+.hdmini{display:none}
+/* 5.9.0 · n° 224 : « Mes rôles » redevient l'icône seule (libellé retiré) */
+.roundbtn{flex:none;width:44px;height:44px;border-radius:22px;border:0;background:#FFFFFF;color:var(--pc-encre);display:flex;align-items:center;justify-content:center;padding:0;position:relative}
+.hd .band{gap:8px}
+.roundbtn .dot{position:absolute;top:-2px;right:-2px;min-width:20px;height:20px;padding:0 5px;border-radius:10px;background:var(--pc-jaune);color:var(--pc-encre);font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center;border:2px solid #FFFFFF}
+.ecu{flex:none;display:flex;align-items:center;justify-content:center;font-family:var(--pc-titre);font-weight:800}
+
+/* ---------- Contenu ---------- */
+.bd{flex:1;padding:18px 20px 130px;display:flex;flex-direction:column;gap:14px}
+.bd h2{margin:6px 0 0;font-family:var(--pc-titre);font-weight:800;font-size:22px;letter-spacing:-.02em;line-height:1.15}
+.sec{display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin-top:4px}
+.sec h2{margin:0;min-width:0;font-size:20px}
+.sec button{background:none;border:0;color:var(--pc-action);font-weight:700;font-size:16px;min-height:44px;padding:0;flex:none;white-space:nowrap}
+.kick{font-size:13px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--pc-texte-doux)}
+.det{color:var(--pc-texte-doux);font-size:15px}
+.note{font-size:14px;color:var(--pc-texte-doux);margin:0}
+.empty{color:var(--pc-texte-doux);margin:0}
+.big{font-family:var(--pc-titre);font-weight:800;font-size:34px;line-height:1;letter-spacing:-.02em}
+
+.card{background:var(--pc-papier);border-radius:var(--pc-rayon-carte);padding:16px 18px;box-shadow:var(--pc-ombre-douce);display:flex;flex-direction:column;gap:10px}
+.card.lift{box-shadow:var(--pc-ombre)}
+.card.yellow{color:var(--pc-encre);background:var(--pc-jaune);box-shadow:0 10px 24px rgba(17,22,46,.10);transform:rotate(-1deg)}
+.card.yellow .det,.card.yellow .note{color:var(--pc-encre)}
+.card.dark{background:var(--pc-aplat);color:var(--pc-aplat-texte)}
+.card.dark .det,.card.dark .note{color:#D8DCEA}
+.card.pale{background:var(--pc-bleu-pale);box-shadow:none}
+.card.warn{background:var(--pc-attente-fond);box-shadow:none}
+.card.alert{background:var(--pc-non-fond);box-shadow:none;border:2px solid var(--pc-non-texte);color:var(--pc-texte-ecran)} /* n° 124 : fin de période (année payée, gratuité) */
+.card.flat{box-shadow:none;border:2px solid var(--pc-trait)}
+.card h3{margin:0;font-family:var(--pc-titre);font-weight:800;font-size:22px;line-height:1.1}
+.card.cancel{opacity:.7}
+.stack{display:flex;flex-direction:column;gap:10px}
+.grid2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.grid2>*{min-width:0}
+details.card>summary{list-style:none;font-weight:700;min-height:44px;display:flex;align-items:center;justify-content:space-between;gap:8px;cursor:pointer}
+details.card>summary::-webkit-details-marker{display:none}
+details.card>summary::after{content:"";width:10px;height:10px;border-right:2.5px solid currentColor;border-bottom:2.5px solid currentColor;transform:rotate(45deg);margin-right:6px;flex:none}
+details.card[open]>summary::after{transform:rotate(-135deg)}
+
+/* ---------- Boutons ---------- */
+.btn{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;min-height:var(--pc-bouton-h);padding:10px 20px;border-radius:var(--pc-rayon-bouton);border:2px solid var(--pc-texte-ecran);background:var(--pc-papier);color:var(--pc-texte-ecran);font-weight:700;font-size:16px;text-decoration:none;text-align:center;line-height:1.2}
+.btn.main{background:var(--pc-action);border-color:var(--pc-action);color:var(--pc-action-texte)}
+.btn.ink{background:var(--pc-aplat);border-color:var(--pc-aplat);color:var(--pc-aplat-texte)}
+.btn.ghost{border-color:var(--pc-trait)}
+.btn.danger{border-color:var(--pc-non-texte);color:var(--pc-non-texte)}
+.btn.danger.armed{background:var(--pc-non-texte);color:var(--pc-papier)}
+.btn.small{width:auto;min-height:44px;padding:6px 16px;font-size:15px}
+.btn.link{border:0;background:none;color:var(--pc-action);width:auto;min-height:44px;padding:4px 8px}
+.btn:disabled{opacity:.5;cursor:default}
+.btns{display:flex;gap:10px;flex-wrap:wrap}
+.btns>.btn{flex:1;min-width:0}
+.pair{display:flex;gap:10px}
+.pair .btn{flex:1;min-width:0;padding:10px 12px}
+.pair .yes[aria-pressed="true"]{background:var(--pc-action);border-color:var(--pc-action);color:var(--pc-action-texte)}
+.pair .no[aria-pressed="true"]{background:var(--pc-non-fond);border-color:var(--pc-non-texte);color:var(--pc-non-texte)}
+.card.yellow .pair .yes{background:var(--pc-encre);border-color:var(--pc-encre);color:#FFFFFF}
+.card.yellow .pair .no{background:transparent;border-color:var(--pc-encre);color:var(--pc-encre)}
+.card.yellow .kick{color:var(--pc-encre)!important}
+.card.yellow .btn{border-color:var(--pc-encre);color:var(--pc-encre)}
+.card.yellow .btn.main{background:var(--pc-encre);border-color:var(--pc-encre);color:#FFFFFF}
+
+/* ---------- Pastilles et puces ---------- */
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.chip{min-height:44px;padding:6px 16px;border-radius:var(--pc-rayon-pastille);border:2px solid var(--pc-trait);background:var(--pc-papier);font-weight:700;font-size:15px}
+.chip[aria-pressed="true"]{border-color:var(--pc-action);background:var(--pc-bleu-pale);color:var(--pc-action)}
+.pill{display:inline-flex;align-items:center;gap:4px;padding:4px 12px;border-radius:16px;background:var(--pc-neutre-fond);color:var(--pc-texte-doux);font-weight:700;font-size:14px;line-height:1.3;white-space:nowrap}
+.pill.ok{background:var(--pc-oui-fond);color:var(--pc-oui-texte)}
+.pill.ko{background:var(--pc-non-fond);color:var(--pc-non-texte)}
+.pill.wait{background:var(--pc-attente-fond);color:var(--pc-attente-texte)}
+.pill.blue{background:var(--pc-bleu-pale);color:var(--pc-action)}
+button.pill{border:0;min-height:36px}
+button.pill.armed{background:var(--pc-non-texte);color:var(--pc-papier)}
+.bar{display:flex;height:12px;border-radius:6px;overflow:hidden;background:var(--pc-neutre-fond)}
+.bar span:nth-child(1){background:var(--pc-action)}.bar span:nth-child(2){background:#FF6B4A}
+
+/* ---------- Listes ---------- */
+.list{display:flex;flex-direction:column}
+.row{display:flex;align-items:center;gap:12px;width:100%;min-height:56px;padding:10px 0;background:transparent;border:0;border-bottom:1px solid var(--pc-trait);text-align:left;color:inherit}
+.row:last-child{border-bottom:0}
+.row .g{flex:1;min-width:0;display:flex;flex-direction:column;font-weight:700}
+.row .g small{font-weight:400;color:var(--pc-texte-doux);font-size:14px}
+.row.static{cursor:default}
+.chev{width:9px;height:9px;border-right:2.5px solid var(--pc-texte-doux);border-top:2.5px solid var(--pc-texte-doux);transform:rotate(45deg);flex:none;margin-right:4px}
+.ev{background:var(--pc-papier);border-radius:22px;padding:14px 16px;box-shadow:var(--pc-ombre-douce);display:flex;flex-direction:column;gap:10px}
+.ev .head{display:flex;align-items:center;gap:14px;background:none;border:0;padding:0;text-align:left;width:100%;color:inherit;min-height:56px}
+.ev.cancel .info,.ev.cancel .daybadge{opacity:.7} /* 5.8.0 · n° 214 : l'étiquette « Annulé » garde ses couleurs (charte, clair et sombre) */
+.ev.cancel .t{text-decoration:line-through}
+.ev .t{font-weight:700;font-size:17px;line-height:1.25}
+.ev .s{font-size:15px;color:var(--pc-texte-doux)}
+.ev .info{flex:1;min-width:0;display:flex;flex-direction:column}
+.ev .sel{width:26px;height:26px;flex:none}
+.daybadge{flex:none;width:52px;height:56px;border-radius:16px;background:var(--pc-bleu-pale);display:flex;flex-direction:column;align-items:center;justify-content:center}
+.daybadge span{font-size:13px;font-weight:700;color:var(--pc-action);text-transform:uppercase}
+.daybadge b{font-family:var(--pc-titre);font-size:24px;line-height:1}
+.daybadge.wait{background:var(--pc-attente-fond)}.daybadge.wait span{color:var(--pc-attente-texte)}
+.daybadge.past{background:var(--pc-neutre-fond)}.daybadge.past span{color:var(--pc-texte-doux)}
+.day{margin-top:6px}
+.avatar{flex:none;width:40px;height:40px;border-radius:20px;background:var(--pc-bleu-pale);color:var(--pc-action);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px}
+
+/* ---------- Champs ---------- */
+.field{display:flex;flex-direction:column;gap:6px}
+.field label,.field .lab{font-weight:700;font-size:15px}
+.field input,.field select,.field textarea{width:100%;min-width:0;min-height:var(--pc-cible-min);padding:10px 14px;border:2px solid var(--pc-trait);border-radius:16px;background:var(--pc-papier);font-size:16px}
+.field textarea{min-height:110px;resize:vertical}
+.field input:focus,.field select:focus,.field textarea:focus{outline:none;border-color:var(--pc-action);box-shadow:0 0 0 3px var(--pc-bleu-pale)}
+.field input[type=color]{padding:4px;height:var(--pc-cible-min)}
+.field input[readonly]{background:var(--pc-neutre-fond)}
+.field .doubt{border-color:#F2A33A;background:var(--pc-attente-fond)}
+.check{display:flex;align-items:flex-start;gap:12px;min-height:var(--pc-cible-min);padding:10px 0;cursor:pointer}
+.check input{width:24px;height:24px;flex:none;margin:0;accent-color:var(--pc-action)}
+/* N° 108 : case « Match à domicile » bien visible ; n° 111 : titre écrit tout seul, mis en avant */
+.check.homebox{background:var(--pc-bleu-pale);border:2px solid var(--pc-trait);border-radius:16px;padding:10px 14px;align-items:center}
+.evtitle{background:var(--pc-bleu-pale);border-radius:16px;padding:12px}
+.evtitle input{font-family:var(--pc-titre);font-weight:700;font-size:18px;border-color:var(--pc-bleu-clair)}
+.evtitle .linkbtn{color:var(--pc-action)}
+.switch{display:flex;align-items:center;gap:12px;min-height:var(--pc-cible-min);cursor:pointer}
+.switch input{appearance:none;-webkit-appearance:none;flex:none;width:52px;height:32px;border-radius:16px;background:var(--pc-trait);position:relative;margin:0;transition:background .15s}
+.switch input::after{content:"";position:absolute;top:4px;left:4px;width:24px;height:24px;border-radius:12px;background:#FFFFFF;box-shadow:0 1px 3px rgba(17,22,46,.3);transition:left .15s}
+.switch input:checked{background:var(--pc-action)}
+.switch input:checked::after{left:24px}
+.pwd{display:flex;gap:8px}.pwd input{flex:1}
+.compose{position:sticky;bottom:96px;display:flex;gap:8px;background:var(--pc-fond);padding:8px 0}
+.compose input{flex:1;min-width:0;min-height:var(--pc-cible-min);padding:10px 16px;border:2px solid var(--pc-trait);border-radius:24px;font-size:16px;background:var(--pc-papier)}
+
+/* ---------- Messages ---------- */
+.msgs{display:flex;flex-direction:column;gap:8px}
+.bub{max-width:85%;padding:10px 14px;border-radius:20px 20px 20px 6px;background:var(--pc-papier);box-shadow:var(--pc-ombre-douce)}
+.bub.me{align-self:flex-end;background:var(--pc-action);color:var(--pc-action-texte);border-radius:20px 20px 6px 20px}
+.bub .who{font-size:13px;font-weight:700;color:var(--pc-action)}
+.bub .when{font-size:12px;opacity:.75;margin-top:2px}
+.bub .fwd{font-size:12px;font-style:italic;opacity:.85;margin-bottom:2px}
+.bub .file{display:flex;align-items:center;gap:6px;width:100%;margin:6px 0 2px;padding:8px 10px;border-radius:12px;border:1.5px solid currentColor;background:transparent;color:inherit;font:inherit;font-weight:700;text-align:left;min-height:44px}
+.bub .file span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.bub .file small{font-weight:500;opacity:.8}
+.linkbtn{background:none;border:0;padding:0 2px;color:inherit;font:inherit;text-decoration:underline;cursor:pointer;min-height:24px}
+.attbtn{flex:none;font-size:20px;cursor:pointer}.attlist{margin:4px 0}
+
+/* ---------- Bandeaux ---------- */
+.offline{background:var(--pc-attente-fond);color:var(--pc-attente-texte);border-radius:18px;padding:12px 14px;font-weight:700}
+.sync{display:flex;align-items:center;gap:8px;font-size:14px;color:var(--pc-texte-doux)}
+.sync span{flex:1}
+.sync button{min-height:40px;padding:4px 14px;border:2px solid var(--pc-trait);border-radius:20px;background:var(--pc-papier);font-weight:700;font-size:14px}
+.codebox{font-family:var(--pc-titre);font-weight:800;font-size:38px;letter-spacing:.08em;line-height:1}
+
+/* ---------- Barre d'onglets ---------- */
+.tb{position:fixed;bottom:0;left:0;right:0;z-index:6;display:flex;justify-content:center;pointer-events:none}
+.tb nav{pointer-events:auto;width:100%;max-width:560px;background:var(--pc-papier);border-radius:28px 28px 0 0;box-shadow:0 -6px 20px rgba(17,22,46,.08);padding:10px 8px calc(12px + env(safe-area-inset-bottom));display:grid;grid-template-columns:repeat(5,minmax(0,1fr))}
+.tb button{display:flex;flex-direction:column;align-items:center;gap:3px;background:none;border:0;color:var(--pc-texte-doux);min-height:var(--pc-cible-min);padding:0;font-size:12px;font-weight:500;position:relative}
+.tb button .ic{padding:4px 16px;border-radius:16px;display:flex}
+.tb button[aria-current="page"]{color:var(--pc-action);font-weight:700}
+.tb button[aria-current="page"] .ic{background:var(--pc-bleu-pale)}
+.tb nav.roles{display:none}
+.rolestitle{font-size:13px;font-weight:700;color:var(--pc-texte-doux);padding:0 8px 2px;text-transform:uppercase;letter-spacing:.04em}
+.tb button .n{position:absolute;top:0;right:calc(50% - 26px);min-width:18px;height:18px;padding:0 4px;border-radius:9px;background:var(--pc-jaune);color:var(--pc-encre);font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;box-shadow:0 0 0 1.5px var(--pc-encre)}
+.unread{min-width:22px;height:22px;padding:0 6px;border-radius:11px;background:var(--pc-jaune);color:var(--pc-encre);font-size:12px;font-weight:700;display:inline-flex;align-items:center;justify-content:center;box-shadow:0 0 0 1.5px var(--pc-encre);flex:none}
+.selbar{position:fixed;left:0;right:0;bottom:84px;z-index:7;display:flex;justify-content:center;padding:0 16px}
+.selbar div{width:100%;max-width:528px;background:var(--pc-aplat);color:var(--pc-aplat-texte);border-radius:24px;padding:10px 12px 10px 18px;display:flex;align-items:center;gap:10px;box-shadow:var(--pc-ombre)}
+.selbar span{flex:1;font-weight:700}
+
+#toast{position:fixed;left:50%;bottom:100px;transform:translateX(-50%);z-index:20;max-width:92vw;background:var(--pc-aplat);color:var(--pc-aplat-texte);padding:12px 20px;border-radius:24px;font-weight:700;box-shadow:var(--pc-ombre)}
+
+/* ---------- Ordinateur : onglets en colonne à gauche ---------- */
+@media (min-width:600px){ /* 5.15.0 · n° 246 : bandeau à gauche dès la tablette (600 px), comme sur ordinateur */
+  #app{max-width:1040px;padding-left:240px}
+  html.notb #app{max-width:800px;padding-left:0} /* 5.12.1 · n° 231 : écran sans onglets = centré (même largeur utile qu'avant : 1040 − 240) */
+  .tb{top:0;bottom:0;right:auto;left:max(0px,calc(50% - 520px));width:240px;justify-content:flex-start;align-items:flex-start;padding:24px 16px}
+  .tb nav{max-width:none;grid-template-columns:1fr;gap:6px;border-radius:28px;padding:16px 10px}
+  .tb button{flex-direction:row;justify-content:flex-start;gap:10px;font-size:16px;padding:0 8px}
+  .tb button .ic{padding:8px 12px}
+  .tb button .n{position:static;margin-left:auto}
+  /* n° 104 : bloc « Mes rôles » sous les onglets ; il remplace le bouton aux quatre carrés et la rangée « Tes casquettes » */
+  .tb{flex-direction:column;justify-content:flex-start;gap:16px;overflow-y:auto}
+  .tb nav.roles{display:grid}
+  .tb nav.roles button{text-align:left;line-height:1.2}
+  .tb nav.roles button[aria-current="page"]{color:var(--pc-action-texte)}
+  .tb nav.roles button[aria-current="page"] .ic{background:var(--pc-action)}
+  .tb nav.roles button[aria-current="page"]{background:var(--pc-action);border-radius:16px}
+  /* 5.11.0 · n° 227 : banque d'exercices sous « Mes rôles », sous-entrées en retrait */
+  .tb nav.bank button.sub{padding-left:56px;font-size:15px;min-height:40px;font-weight:600}
+  .hd .band [data-act=espace],.casq,.casqhint{display:none!important}
+  .bd{padding-bottom:60px}
+  .compose{bottom:0}
+  .selbar{bottom:20px;padding-left:256px}
+  /* n° 139 : en-tête réduite figée en haut, sur ordinateur seulement, quand le bloc bleu est sorti de l'écran */
+  body.scrolled .hdmini{display:flex;position:fixed;top:0;z-index:8;left:calc(max(0px,50% - 520px) + 240px);right:max(0px,50% - 520px);align-items:center;gap:12px;padding:8px 20px;background:var(--pc-entete);color:var(--pc-entete-texte);border-radius:0 0 20px 20px;box-shadow:var(--pc-ombre)}
+  .hdmini .logo{flex:none;display:flex;align-items:center}
+  .hdmini .wordmark,.hdmini .wordmark .club{color:inherit}
+  .hdmini .wordmark .my{box-shadow:0 0 0 .035em var(--pc-encre)}
+  .hdmini .mt{flex:none;max-width:30%;font-size:17px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .hdmini .ttabs{flex:1;min-width:0;margin:0}
+  .hdmini .ttabs button{min-height:44px;color:inherit}
+  .hdmini .roundbtn{width:36px;height:36px}
+  #toast{bottom:32px}
+}
+.pwmeter{font-size:14px;font-weight:700;min-height:0}
+.pwmeter.faible{color:var(--pc-non-texte)}.pwmeter.correct{color:var(--pc-attente-texte)}.pwmeter.solide{color:var(--pc-oui-texte)}
+.ts{min-height:0}
+
+/* 3.1 · espace coach : tableaux de statistiques */
+.tbl{border-collapse:collapse;width:100%;font-size:15px}
+.tbl th{text-align:left;font-size:13px;color:var(--pc-texte-doux);font-weight:700;padding:6px 8px;border-bottom:2px solid var(--pc-trait);white-space:nowrap}
+.tbl td{padding:8px;border-bottom:1px solid var(--pc-trait);white-space:nowrap}
+.tbl tr:last-child td{border-bottom:0}
+.chip input[type=radio]{width:18px;height:18px;min-height:0;margin:0;flex:none;accent-color:var(--pc-action)}
+
+/* 3.2 · espaces, annonces, missions */
+.rolepill{height:44px;padding:0 16px;border-radius:22px;background:var(--pc-jaune);color:var(--pc-encre);display:flex;align-items:center;font:800 18px var(--pc-titre);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:60%}
+.hd .under{font-size:16px;position:relative}
+.hd .band .roundbtn{flex:none}
+.casq{display:flex;gap:8px;overflow-x:auto;padding-bottom:2px}
+.casqhint{margin:0 0 6px;font-size:13px;font-weight:700;color:var(--pc-texte-doux)}
+.casq button{flex:none;display:inline-flex;align-items:center;gap:8px;min-height:48px;padding:0 18px 0 14px;border-radius:24px;font-weight:700;font-size:16px;border:2px solid var(--pc-texte-ecran);background:var(--pc-papier);color:var(--pc-texte-ecran);box-shadow:0 2px 0 var(--pc-texte-ecran)}
+/* n° 99 : casquette ouverte en bleu mypocketclub (texte blanc, contraste 5,2:1) ; le jaune reste pour l'action principale de l'écran */
+.casq button[aria-selected="true"]{border-color:var(--pc-action);background:var(--pc-action);color:var(--pc-action-texte);box-shadow:0 2px 0 var(--pc-texte-ecran)}
+.casq button .n{min-width:22px;height:22px;padding:0 6px;border-radius:11px;background:var(--pc-jaune);color:var(--pc-encre);font-size:12px;font-weight:700;display:inline-flex;align-items:center;justify-content:center;margin-left:2px;box-shadow:0 0 0 1.5px var(--pc-encre)} /* 5.1.0 (n° 190) : ce qui attend dans ce rôle */
+/* n° 116 (alpha 4.1.0) : un seul bloc bleu dans les espaces : en-tête, qui, casquettes, onglets.
+   Casquette ouverte en jaune, texte encre (contraste 12:1) ; les autres au contour, couleur du texte de l'en-tête. */
+.hd .casq button{background:transparent;color:inherit;border-color:currentColor;box-shadow:none;min-height:44px;font-size:15px}
+.hd .casq button[aria-selected="true"]{background:var(--pc-jaune);border-color:var(--pc-jaune);color:var(--pc-encre);box-shadow:none}
+.hd.tabbed{padding-bottom:0}
+.hd .ttabs{margin:0 -12px}
+.hd .ttabs button{color:inherit}
+.hd .who.sp b{font:800 30px/1.02 var(--pc-titre);letter-spacing:-.02em;white-space:normal}
+.defline{margin:8px 0 0;font-size:14px;color:var(--pc-texte-doux);text-align:center}
+.defline button{border:0;background:none;padding:12px 4px;font:inherit;font-weight:700;color:var(--pc-texte-ecran);text-decoration:underline}
+.tiles{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.tile{background:var(--pc-papier);border-radius:20px;padding:12px;display:flex;flex-direction:column;box-shadow:0 4px 14px rgba(17,22,46,.06);border:0;text-align:left;color:inherit;font:inherit}
+.tile b{font-family:var(--pc-titre);font-size:28px;line-height:1}
+.tile span{font-size:14px;color:var(--pc-texte-doux)}
+.tile.blue{background:var(--pc-action);color:var(--pc-action-texte)}.tile.blue span{color:var(--pc-action-texte)}
+.tile.ok{background:var(--pc-oui-fond)}.tile.ok b,.tile.ok span{color:var(--pc-oui-texte)}
+.bigadd{border:0;background:var(--pc-jaune);color:var(--pc-encre);font-weight:700;font-size:19px;min-height:60px;border-radius:30px;display:flex;align-items:center;justify-content:center;gap:10px;box-shadow:0 10px 22px rgba(17,22,46,.12)}
+.ann{display:flex;gap:12px;align-items:flex-start;border:0;background:transparent;text-align:left;color:inherit;font:inherit;width:100%;padding:10px 0;border-bottom:1px solid var(--pc-trait)}
+.ann:last-child{border-bottom:0}
+.ann .dot{width:10px;height:10px;border-radius:5px;background:var(--pc-action);flex:none;margin-top:7px}
+.ann .dot.read{background:transparent}
+.mission{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:10px 0;border-bottom:1px solid var(--pc-trait)}
+.mission:last-child{border-bottom:0}
+.mission .g{flex:1 1 160px;min-width:0;display:flex;flex-direction:column;font-weight:700} /* n° 142 : les boutons passent dessous sur un écran étroit */
+.mission .ybtns{flex-basis:100%;display:flex;flex-wrap:wrap;gap:8px}
+.mission .g small{font-weight:400;color:var(--pc-texte-doux);font-size:14px}
+.progress{height:14px;border-radius:7px;background:var(--pc-neutre-fond);overflow:hidden}.progress span{display:block;height:100%;background:var(--pc-action);border-radius:7px}
+/* vidéos des exercices (3.2.1) */
+.vthumb{flex:none;position:relative;width:96px;height:128px;border-radius:14px;overflow:hidden;background:var(--pc-bleu-pale);display:flex;align-items:center;justify-content:center}
+.vthumb img,.vthumb video{width:100%;height:100%;object-fit:cover;display:block;pointer-events:none}
+.vthumb .vplay{position:absolute;inset:auto;width:26px;height:26px;border-radius:50%;background:rgba(17,22,46,.72);color:#fff;font-size:11px;display:flex;align-items:center;justify-content:center;padding-left:2px}
+.vthumb.none small{font-size:11px;line-height:1.2;text-align:center;color:var(--pc-texte-doux);padding:4px}
+.vplayer{width:100%;max-height:70vh;border-radius:16px;background:#000;display:block}
+.vthumb.on .vplay{opacity:0}
+.vthumb .vplay{transition:opacity .2s}
+@media (min-width:700px){.vthumb{width:120px;height:160px}}
+
+/* Alpha 3.2.5 · profils de test */
+.swbar{position:sticky;top:0;z-index:50;display:flex;align-items:center;gap:10px;background:var(--pc-encre);color:#fff;padding:calc(6px + env(safe-area-inset-top)) 14px 6px;font-size:14px;font-weight:700}
+.swbar{box-sizing:border-box;width:100%;max-width:100%}
+.swbar label{flex:none;white-space:nowrap}
+.swbar select{flex:1;min-width:0;width:100%;min-height:40px;border-radius:12px;border:2px solid #fff;background:#fff;color:var(--pc-encre);font-weight:700;font-size:16px;padding:0 10px}
+
+
+/* ---------- 3.5.0 · appel en tuiles (n° 81, claude/10-appel-en-tuiles.md) : couleurs de la charte uniquement ---------- */
+.tstrip{background:var(--pc-entete);color:var(--pc-entete-texte);border-radius:var(--pc-rayon-carte);padding:12px 12px 0;display:flex;flex-direction:column;gap:10px}
+.tsid{display:flex;align-items:center;gap:12px}.tsid>span{display:flex;flex-direction:column;min-width:0}
+.tsid b{font:800 22px/1.05 var(--pc-titre)}.tsid small{font-size:13px;opacity:.85}
+.ttabs{display:flex;overflow-x:auto;gap:2px;margin:0 -4px}
+.ttabs button{flex:1 0 auto;min-height:48px;padding:0 6px;border:0;background:none;color:inherit;font-weight:700;font-size:14px;border-bottom:4px solid transparent;opacity:.85}
+.ttabs button[aria-current="page"]{border-bottom-color:var(--pc-jaune);opacity:1}
+.rollnav{display:flex;align-items:center;gap:8px}.rollnav>span{flex:1;display:flex;flex-direction:column;align-items:center;text-align:center}
+.rollnav b{font-size:17px;display:block}.rollnav b::first-letter{text-transform:uppercase}.rollnav small{color:var(--pc-texte-doux);font-size:14px}
+.rollnav .roundbtn:disabled{opacity:.35}
+.seg{display:flex;gap:6px;overflow-x:auto}
+.seg button{flex:1 0 auto;min-height:44px;padding:0 12px;border-radius:22px;border:2px solid var(--pc-trait);background:var(--pc-papier);font-weight:700;font-size:14px}
+.seg button[aria-pressed="true"]{background:var(--pc-aplat);border-color:var(--pc-aplat);color:var(--pc-aplat-texte)}.seg button:disabled{opacity:.4}
+.rollcount{flex-direction:row;align-items:baseline;flex-wrap:wrap;gap:4px 10px}
+.rollcount .big{font-size:64px;color:var(--pc-action);line-height:.95}.rollcount .big small{font-size:30px;color:var(--pc-texte-doux)}
+.rollcount .rclab{font-weight:700;font-size:18px}.rollcount .det{flex:1 1 100%}
+.tiles9{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+@media (min-width:600px){.tiles9{grid-template-columns:repeat(auto-fill,minmax(120px,1fr))}}
+.tile9{position:relative;min-height:96px;border-radius:20px;padding:26px 8px 10px;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;border:2px solid transparent;font:inherit;color:var(--pc-texte-ecran);background:var(--pc-papier)}
+.tile9 b{font:800 20px/1.05 var(--pc-titre);overflow-wrap:anywhere}
+.tile9 small{font-size:12px;font-weight:700;font-variant:small-caps;text-transform:lowercase;letter-spacing:.04em;overflow-wrap:anywhere}
+.tile9 .ti{position:absolute;top:6px;left:9px;font-weight:800;font-size:16px;line-height:1;display:flex}
+.tile9 .tc{position:absolute;top:7px;right:9px;font-size:12px;font-weight:700}
+.tile9 .ta{font-size:12px;font-weight:700;color:var(--pc-action);margin-top:2px}
+.t-yes{background:var(--pc-jaune)}.tile9.t-yes{color:var(--pc-encre)}
+.t-no{background:var(--pc-trait);color:var(--pc-texte-doux);box-shadow:inset 0 3px 6px rgba(17,22,46,.18)}.tile9.t-no{color:var(--pc-texte-doux)}
+.t-wait{background:var(--pc-attente-fond);border:2px dashed #F08A24}.tile9.t-wait{color:var(--pc-attente-texte)}
+.t-pres{background:var(--pc-action)}.tile9.t-pres{color:var(--pc-action-texte)}
+.t-late{background:var(--pc-bleu-pale);border:2px solid var(--pc-action)}
+.t-abs{background:var(--pc-fond);border:2px solid var(--pc-trait)}.tile9.t-abs{color:var(--pc-texte-doux)}
+.rollfoot{position:sticky;bottom:calc(76px + env(safe-area-inset-bottom));z-index:5;padding-top:4px}
+.rollfoot .btn{width:100%;box-shadow:var(--pc-ombre)}
+.rollband{border:0;width:100%;text-align:left;background:var(--pc-papier);border-radius:var(--pc-rayon-carte);padding:14px 16px;display:flex;flex-direction:column;gap:8px;box-shadow:var(--pc-ombre-douce);font:inherit;color:inherit}
+.rollband .rb1{font-size:17px}
+.minibar{display:flex;gap:3px}.minibar i{flex:1;height:12px;border-radius:4px}
+.latemsg{flex-direction:row;flex-wrap:wrap;align-items:center;gap:8px}.latemsg span{flex:1 1 60%}
+.latemsg input{min-height:44px;border:2px solid var(--pc-trait);border-radius:12px;padding:4px 8px}
+.deroule{align-items:center}.dnum{flex:none;width:32px;height:32px;border-radius:16px;background:var(--pc-bleu-pale);color:var(--pc-action);font-weight:800;display:flex;align-items:center;justify-content:center}
+.dmini{flex:none;width:64px}.dmini svg{width:64px;height:auto;display:block}
+/* n° 77 · score */
+.score-l{display:grid;grid-template-columns:1fr 64px 12px 64px 48px;gap:6px;align-items:center}
+.score-l input{min-height:48px;border:2px solid var(--pc-trait);border-radius:12px;padding:4px 8px;width:100%}
+.score-l input[type=number]{text-align:center;font-weight:800;font-size:18px}
+.res-v{background:var(--pc-oui-fond);color:var(--pc-oui-texte)}.res-d{background:var(--pc-non-fond);color:var(--pc-non-texte)}.res-n{background:var(--pc-neutre-fond);color:var(--pc-texte-doux)}
+/* n° 76 · réorganiser les blocs */
+.blk{position:relative;display:flex;flex-direction:column;gap:12px}
+.blkbar{display:flex;align-items:center;gap:8px;background:var(--pc-bleu-pale);border-radius:16px;padding:4px 4px 4px 14px}
+.blkbar b{flex:1;font-size:15px}.blkbar button{width:48px;height:48px;border-radius:14px;border:2px solid var(--pc-trait);background:var(--pc-papier);font-size:18px;font-weight:800}
+.blkbar button:disabled{opacity:.35}
+@media (min-width:600px){.rollfoot{bottom:16px}}
+
+.tagrow{display:flex;flex-direction:column;gap:4px;margin:6px 0}
+/* n° 156 · jour J : rendez-vous du jour en tête de l'Accueil */
+.today{display:flex;flex-direction:column;gap:10px;padding:10px;border:3px solid var(--pc-jaune);border-radius:24px;background:var(--pc-jaune-pale)}
+/* pastille « 0 / 2 » : à côté du nom de la mission, plus sur toute la largeur */
+.mission .ml{display:flex;flex-wrap:wrap;align-items:center;gap:6px}
+.blk.off .blkbar{opacity:.7}
+/* n° 79 : + accompagnants */
+.guests{display:flex;align-items:center;gap:8px;padding:6px 0}.guests .g{flex:1;display:flex;flex-direction:column;font-weight:700}.guests .g small{font-weight:400;color:var(--pc-texte-doux);font-size:14px}.guests b{min-width:28px;text-align:center;font-size:18px}.guests .btn{flex:none;width:48px;padding:0}
+/* n° 160 : temps restant d'une séance */
+.gauge{display:flex;flex-direction:column;gap:6px;padding:12px 14px;border-radius:16px;background:var(--pc-bleu-pale)}
+.gauge .gtxt{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:baseline;gap:4px 8px;font-size:18px}.gauge .gtxt .det{white-space:nowrap}
+.gauge .gbar{height:10px;border-radius:5px;background:var(--pc-papier);overflow:hidden}.gauge .gbar span{display:block;height:100%;background:var(--pc-action)}
+.gauge.full{background:var(--pc-oui-fond)}.gauge.full .gbar span{background:var(--pc-oui-texte)}
+.gauge.over{background:var(--pc-non-fond)}.gauge.over .gbar span{background:var(--pc-non-texte)}
+/* 4.8.0 · guide « Installer et notifications » : étapes numérotées */
+.steps{margin:0;padding:0;list-style:none;counter-reset:st;display:flex;flex-direction:column;gap:12px}
+.steps>li{counter-increment:st;display:flex;gap:12px;align-items:flex-start;font-size:16px;line-height:1.4}
+.steps>li::before{content:counter(st);flex:none;width:28px;height:28px;border-radius:50%;background:var(--pc-action);color:var(--pc-action-texte);font-weight:800;font-size:15px;display:flex;align-items:center;justify-content:center}
+/* 4.9.0 · n° 175 : pages légales, liens en bas des écrans publics, lien dans la case des conditions */
+.legal-foot{display:flex;flex-wrap:wrap;justify-content:center;align-items:center;gap:0 2px;margin:0}
+.legal-foot span{color:var(--pc-texte-doux)}
+.btn.link.inl{display:inline;min-height:0;padding:0;font:inherit;font-weight:700;text-decoration:underline;vertical-align:baseline}
+.legal .card{gap:8px}
+.legal .card h3{font-size:19px}
+.legal-p{color:var(--pc-texte-ecran)}
+.legal-ul{color:var(--pc-texte-ecran);padding-left:18px;margin:0;display:flex;flex-direction:column;gap:6px}
+.legal-tab .row .g small{white-space:normal}
+.legal-v{text-align:center}
+.legal-links{gap:8px}
+
+/* 5.0.0 · n° 197 : écran d'ouverture (identité : fond encre, cercle jaune, « club » bleu clair), identique en clair et en sombre */
+.ouvert{position:relative;overflow:hidden;flex:1;display:flex;flex-direction:column;min-height:100vh;min-height:100dvh;background:#11162E;color:#FFFFFF}
+.ouvert::before{content:"";position:absolute;left:-60px;bottom:-70px;width:220px;height:220px;border-radius:50%;background:rgba(255,201,60,.14);pointer-events:none}
+.ouvert>*{position:relative}
+.ouvert .splash p.slog{color:#D8DCEA;font-size:17px}
+.ouvert .btn.main{background:var(--pc-bleu);border-color:var(--pc-bleu);color:#FFFFFF}
+.ouvert .btn.link{color:var(--pc-bleu-clair)}
+.ouvert .btn.link.jaune{color:var(--pc-jaune);font-weight:700;align-self:center;text-decoration:underline}
+.ouvert .legal-foot .btn.link{color:#D8DCEA;text-decoration:underline}
+.ouvert .legal-foot span{color:#D8DCEA}
+.ouvert .bd>.note,.ouvert .bd>.empty{color:#C5CAE0}
+.ouvert .bd>.note a,.ouvert .bd>p a{color:var(--pc-bleu-clair)}
+.ouvert .card{color:var(--pc-texte-ecran)}
+.ouvert .splash{padding-left:12px;padding-right:12px}
+
+/* 5.2.1 : jour de la semaine sous les champs date */
+.dayhint{font-weight:700;color:var(--pc-texte-ecran)}
+.dayhint[hidden]{display:none}
+
+/* 5.2.1 : pipette (logo en grand, un toucher prend la couleur) */
+.pipov{position:fixed;inset:0;z-index:60;background:rgba(17,22,46,.72);display:flex;align-items:center;justify-content:center;padding:16px}
+.pipbox{background:var(--pc-papier);color:var(--pc-texte-ecran);border-radius:24px;padding:18px;display:flex;flex-direction:column;gap:12px;align-items:center;max-width:360px;width:100%}
+.pipbox canvas{max-width:100%;height:auto;border:2px solid var(--pc-trait);border-radius:16px;cursor:crosshair;touch-action:manipulation;background:repeating-conic-gradient(#d8d8d8 0 25%,#fff 0 50%) 50%/16px 16px}
+
+/* 5.5.0 · onboarding « Pour bien démarrer » : coche des lignes, bouton entouré par « Me montrer », barre d'étape */
+.obcard .obblk { display: flex; flex-direction: column; gap: 4px; margin-top: 6px; }
+.obck { flex: none; width: 24px; height: 24px; border-radius: 50%; border: 2px solid var(--pc-trait); display: inline-flex; align-items: center; justify-content: center; font-weight: 800; font-size: 14px; }
+.obck.on { background: var(--pc-oui-fond); color: var(--pc-oui-texte); border-color: transparent; }
+.obsteps { margin: 6px 0 0; padding-left: 22px; display: flex; flex-direction: column; gap: 6px; }
+/* 5.14.0 · n° 237 : pendant « Me montrer », un cadre jaune (.ob-ring, posé par js/v55.js) entoure l'élément à toucher, le reste s'assombrit.
+   .ob-hl ne change plus l'aspect de l'élément : c'est seulement son repère. */
+.ob-ring { position: fixed; left: 0; top: 0; z-index: 59; box-sizing: content-box; border: 4px solid var(--pc-jaune); border-radius: 16px; box-shadow: 0 0 0 4000px rgba(17, 22, 46, .38); pointer-events: none; opacity: 0; transition: left .7s cubic-bezier(.2, .8, .2, 1), top .7s cubic-bezier(.2, .8, .2, 1), width .7s cubic-bezier(.2, .8, .2, 1), height .7s cubic-bezier(.2, .8, .2, 1), opacity .3s; }
+.ob-ring.in { opacity: 1; }
+.ob-ring.fast { transition: opacity .3s; }
+@media (max-width: 959px) { html.obshow main.bd { padding-bottom: 260px; } }
+.obbar.enter { animation: obbarin .4s cubic-bezier(.2, .8, .2, 1); }
+@keyframes obbarin { from { transform: translateY(20px); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .ob-ring, .ob-ring.fast { transition: none; } .obbar.enter { animation: none; } }
+.obbar { position: fixed; left: 12px; right: 12px; bottom: calc(84px + env(safe-area-inset-bottom)); z-index: 60; background: var(--pc-jaune); color: var(--pc-encre); border-radius: 16px; padding: 12px 14px; display: flex; gap: 10px; align-items: center; box-shadow: 0 10px 24px rgba(17,22,46,.18); }
+.obbar-q, .obbar-steps { display: none; }
+.obbar-now { flex: 1; font-weight: 700; }
+.obbar .btn.ink { flex: none; }
+/* 5.8.0 · n° 208 : bandeau avec le texte de l'étape ; à la fin, « Revenir à la fiche » ; « C'est fait » coché */
+.obbar-now { font-size: 15px; line-height: 1.3; }
+.obbar-hint { font-weight: 400; opacity: .8; }
+.obbar-btns { display: flex; gap: 8px; flex: none; flex-wrap: wrap; justify-content: flex-end; }
+.obbar .btn.ghost { background: transparent; border-color: var(--pc-encre); color: var(--pc-encre); }
+@media (max-width: 959px) { .obbar.end { flex-direction: column; align-items: stretch; } .obbar.end .obbar-btns { justify-content: stretch; } .obbar.end .obbar-btns .btn { flex: 1; } }
+.obok { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; padding: 0 16px; border-radius: var(--pc-rayon-bouton); background: var(--pc-oui-fond); color: var(--pc-oui-texte); font-weight: 700; }
+.obrole { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.obrole select { flex: 1; min-width: 180px; }
+@media (min-width: 960px) {
+  .obbar.side { flex-direction: column; align-items: stretch; padding: 16px; }
+  .obbar.side { position: fixed; right: auto; bottom: auto; pointer-events: auto; box-shadow: none; }
+  .obbar.side .obbar-q { display: block; font-family: var(--pc-titre); font-weight: 800; font-size: 17px; line-height: 1.2; }
+  .obbar.side .obbar-steps { display: block; margin: 0; padding-left: 20px; font-size: 14px; }
+  .obbar.side .obbar-steps li { margin: 4px 0; }
+  .obbar.side .obbar-steps li.on { font-weight: 700; }
+  .obbar.side .obbar-steps li.done { opacity: .55; text-decoration: line-through; }
+}
+.obshot { margin: 8px 0 0; }
+.obshot button { border: 0; padding: 0; background: none; display: block; cursor: zoom-in; }
+.obshot img { width: 100%; max-width: 420px; height: auto; border-radius: 12px; border: 2px solid var(--pc-trait); display: block; }
+.obshot figcaption { margin-top: 4px; }
+@media (min-width: 960px) { .obshot img { width: 100%; max-width: 760px; cursor: default; } .obshot button { cursor: default; } }
+.obzoom { position: fixed; inset: 0; z-index: 90; background: rgba(17,22,46,.88); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; padding: 16px; }
+.obzoom img { max-width: 100%; max-height: calc(100% - 70px); border-radius: 14px; }
+/* 5.6.0 · n° 202 : espace admin */
+@media (max-width:959px){.admtb nav{grid-template-columns:repeat(4,minmax(0,1fr))}}
+.admnums{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;text-align:center}
+.admnums.three{grid-template-columns:repeat(3,minmax(0,1fr))}
+.admnums .big{font-size:28px}
+.admquote{margin:0;padding:10px 14px;border-left:4px solid var(--pc-jaune);background:var(--pc-bleu-pale);border-radius:0 12px 12px 0;white-space:pre-wrap;overflow-wrap:anywhere}
+.admsecret{display:block;padding:10px 12px;border-radius:12px;background:var(--pc-bleu-pale);font-size:16px;letter-spacing:.08em;overflow-wrap:anywhere;user-select:all}
+/* 5.9.0 · n° 222-223 : pendant « Me montrer », un exemple à la place d'une zone absente ; rien n'est enregistré */
+.obsimbox { display: flex; flex-direction: column; gap: 10px; margin-bottom: 12px; }
+.obsim { border: 2px dashed var(--pc-trait); display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
+.obbar-sim { display: block; font-weight: 400; font-size: 13px; margin-top: 4px; }
+/* 5.9.0 · n° 225 : bouton « Changer de club » à côté du nom du club */
+.nmrow{display:flex;align-items:center;gap:8px;min-width:0}
+.nmrow b{min-width:0}
+.clubsw{flex:none;width:28px;height:28px;border-radius:14px;border:1.5px solid rgba(255,255,255,.7);background:transparent;color:#FFFFFF;display:flex;align-items:center;justify-content:center;padding:0;cursor:pointer;position:relative}
+.clubsw::after{content:'';position:absolute;inset:-8px}
+.clubsw:focus-visible{outline:3px solid var(--pc-jaune);outline-offset:2px}
+/* 5.10.0 · n° 161 : schéma animé (maquette des tutos basket) */
+.stsvg{display:block;width:100%;height:auto;background:#F1F3F8;border-radius:14px;user-select:none;-webkit-user-select:none}
+.stsvg .stsel{opacity:0}.stsvg g.on .stsel{opacity:1}
+.stsvg[data-sted] g[data-it]{cursor:grab}
+.stp{display:flex;flex-direction:column;gap:8px}
+.stpbar{display:flex;align-items:center;gap:8px}
+.stbtn{width:44px;height:44px;border-radius:12px;border:1px solid var(--pc-trait);background:var(--pc-papier);color:inherit;font-size:20px;cursor:pointer;flex:none}
+.stpn{margin-left:auto;font-size:13px;opacity:.75}
+.stpc{margin:0;min-height:44px;font-size:15px;line-height:1.45}
+.stmini{max-width:180px}
+.stchips{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.stchip{min-width:40px;height:40px;border-radius:10px;border:1px solid var(--pc-trait);background:var(--pc-papier);color:inherit;font-weight:700;cursor:pointer}
+.stchip[aria-pressed=true]{background:var(--pc-bleu);border-color:var(--pc-bleu);color:#FFFFFF}
+.stchip.add{border-style:dashed;background:transparent}
+.stedit{display:flex;flex-direction:column;gap:10px}
+.stsel-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;min-height:44px}
+.stsel-row .det{flex:1;min-width:140px}
+.stlab{display:flex;align-items:center;gap:6px;font-size:13px}.stlab input{width:56px;min-height:40px}
+.dmini .stsvg{width:46px;border-radius:6px}
+@media (min-width:700px){.stp,.stedit .stsvg{max-width:420px}}
+
+/* 5.13.0 · n° 233 : vignette = schéma animé ; n° 232 : compteur de l'IA */
+.vthumb.sthumb{background:#F1F3F8}.vthumb.sthumb .stsvg{width:100%;height:100%;border-radius:0;pointer-events:none}
+.aitime{font-variant-numeric:tabular-nums;color:var(--pc-texte-doux);font-weight:700;margin-left:6px}
+
+/* ===== 5.15.0 ===== */
+/* n° 241 : la capture d'exemple à la largeur du texte, alignée avec lui */
+.obshot img{max-width:100%}
+.card .obshot{margin-left:0;margin-right:0}
+/* n° 239 : la demande à traiter en jaune, jusqu'à la validation ou au retour */
+.todo-hl{outline:3px solid var(--pc-jaune)!important;outline-offset:2px;background:var(--pc-attente-fond)!important;color:var(--pc-attente-texte);border-radius:16px}
+.row.todo-hl{padding-left:10px;padding-right:10px}
+/* n° 246 : « Mes rôles » en menu déroulant ; seul le sous-onglet en cours est encadré de jaune */
+@media (min-width:600px){
+  .tb nav.roles [data-act=casq]{position:relative;padding-right:28px}
+  .tb nav.roles [data-act=casq]::after{content:"▾";position:absolute;right:10px;top:50%;transform:translateY(-50%);font-size:13px;color:var(--pc-texte-doux)}
+  .tb nav.roles [data-act=casq].ropen::after{content:"▴";color:var(--pc-action)}
+  .tb .rsub button.todo-hl{outline:none!important;background:none!important;color:inherit}
+  .tb .rsub button.todo-hl::after{content:"";width:10px;height:10px;border-radius:5px;background:var(--pc-jaune);margin-left:auto;flex:none}
+  .tb nav.roles button[aria-current="page"],.tb nav.roles button.ropen{background:var(--pc-bleu-pale);color:var(--pc-action);border-radius:16px}
+  .tb nav.roles button[aria-current="page"] .ic,.tb nav.roles button.ropen .ic{background:none}
+  .tb .rsub{display:flex;flex-direction:column;gap:4px;margin:2px 0 8px 18px;padding-left:10px;border-left:2px solid var(--pc-trait)}
+  .tb .rsub button{flex-direction:row;justify-content:flex-start;min-height:42px;padding:0 12px;font-size:15px;font-weight:600;color:var(--pc-texte-ecran);border-radius:14px;border:3px solid transparent;background:none;text-align:left}
+  .tb .rsub button[aria-current="page"]{border-color:var(--pc-jaune);background:var(--pc-attente-fond);color:var(--pc-encre);font-weight:700}
+  html.rsubon nav.ttabs{display:none}
+  .tb{width:240px}
+}
+@media (min-width:600px) and (max-width:959px){
+  #app{padding-left:220px}
+  .tb{width:220px;padding:20px 10px}
+}
+/* n° 240 : onboarding en panneau, le site flouté et assombri derrière ; il suit le thème (--pc-fond, --pc-papier) */
+.obov{position:fixed;inset:0;z-index:80;display:flex;align-items:flex-end;justify-content:center}
+.obback{position:absolute;inset:0;background:rgba(17,22,46,.45);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}
+.obpanel{position:relative;width:100%;max-width:640px;background:var(--pc-papier);color:var(--pc-texte-ecran);border-radius:28px 28px 0 0;box-shadow:0 -10px 40px rgba(17,22,46,.3);padding:12px 20px calc(24px + env(safe-area-inset-bottom));display:flex;flex-direction:column;gap:12px;animation:obup .35s ease}
+.obpanel.open{background:var(--pc-fond);max-height:calc(100dvh - 56px);overflow:auto}
+@keyframes obup{from{transform:translateY(40px);opacity:0}to{transform:none;opacity:1}}
+@media (prefers-reduced-motion:reduce){.obpanel{animation:none}}
+.obgrip{width:44px;height:5px;border-radius:3px;background:var(--pc-trait);margin:0 auto 4px}
+.obkick{align-self:flex-start;background:var(--pc-jaune);color:var(--pc-encre);border-radius:20px;padding:4px 12px;font-size:12px;font-weight:800;letter-spacing:.04em;text-transform:uppercase}
+.obpanel h2{font-family:var(--pc-titre);font-weight:800;font-size:26px;line-height:1.15;margin:0}
+.obpanel.mini p{margin:0;font-size:16px;line-height:1.45;color:var(--pc-texte-doux)}
+.obpanel .linkbtn{align-self:center}
+.obph{display:flex;align-items:center;gap:10px}
+.obred{width:48px;height:48px;border-radius:24px;border:2px solid var(--pc-trait);background:var(--pc-papier);color:var(--pc-texte-ecran);font-size:20px;flex:none}
+.obprog{height:8px;border-radius:4px;background:var(--pc-trait);overflow:hidden}.obprog span{display:block;height:8px;background:var(--pc-action);border-radius:4px}
+.obrubs{display:flex;flex-direction:column;gap:10px}
+.obrub{background:var(--pc-papier);border:2px solid var(--pc-trait);border-radius:24px;overflow:hidden}
+.obrub.open{border-color:var(--pc-action)}
+.obrh{width:100%;min-height:60px;display:flex;align-items:center;gap:12px;padding:0 16px;background:none;border:0;color:inherit;font:inherit;text-align:left}
+.obrk{flex:none;min-width:34px;height:34px;border-radius:17px;background:var(--pc-bleu-pale);color:var(--pc-action);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:800;padding:0 6px}
+.obrk.ok{background:var(--pc-oui-texte);color:#fff;font-size:16px}
+.obrt{flex:1;font-family:var(--pc-titre);font-weight:800;font-size:18px}
+.obchev{color:var(--pc-texte-doux)}
+.obrb{padding:0 12px 12px}
+.obpill{position:fixed;right:16px;bottom:calc(96px + env(safe-area-inset-bottom));z-index:7;background:var(--pc-jaune);color:var(--pc-encre);border:0;border-radius:24px;min-height:48px;padding:0 18px;font-weight:700;font-size:15px;box-shadow:0 8px 22px rgba(17,22,46,.2)}
+html:has(.obov) body{overflow:hidden}
+@media (min-width:600px){
+  .obpanel{max-width:760px}
+  .obpill{bottom:24px}
+}
+@media (min-width:1200px){
+  .obpanel.open{max-width:1040px}
+  .obpanel.open .obrubs{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.4fr);align-items:start}
+  .obpanel.open .obrubs .obrub.open{grid-column:2;grid-row:1 / span 20}
+  .obpanel.open .obrubs .obrub:not(.open){grid-column:1}
+}
+/* n° 242 et 243 : carnet du coach */
+.carnet{display:flex;flex-direction:column;gap:18px}
+.cblk{display:flex;flex-direction:column;gap:12px}
+.ctiles{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.ctile{display:flex;flex-direction:column;align-items:stretch;background:var(--pc-papier);border:0;border-radius:20px;box-shadow:var(--pc-ombre);overflow:hidden;padding:0;text-align:left;color:inherit;font:inherit;min-height:150px}
+.ctile .cthumb{display:flex;align-items:center;justify-content:center;height:110px;background:var(--pc-bleu-pale);overflow:hidden}
+.ctile .cthumb svg{width:100%;height:100%}
+.ctile .cthumb .vthumb{width:100%;height:110px;border-radius:0}
+.ctile .ct{font-weight:700;font-size:15px;line-height:1.25;padding:10px 12px 0}
+.ctile .cs{font-size:13px;color:var(--pc-texte-doux);padding:2px 12px 12px}
+.ctile.add{border:2px dashed var(--pc-trait);box-shadow:none;background:none;align-items:center;justify-content:center;color:var(--pc-action);gap:6px}
+.ctile.add .ct{padding:0}
+.terrainbtn{display:flex;align-items:center;gap:14px;background:var(--pc-encre);color:#fff;border:0;border-radius:24px;padding:14px 16px;text-align:left;font:inherit;min-height:64px}
+.terrainbtn .tbic{width:48px;height:48px;border-radius:14px;background:var(--pc-jaune);display:flex;align-items:center;justify-content:center;flex:none}
+.terrainbtn b{display:block;font-family:var(--pc-titre);font-size:18px}.terrainbtn small{display:block;opacity:.8;font-size:13px;margin-top:2px}
+.tacbtn{background:var(--pc-jaune)!important;color:var(--pc-encre)!important;border:0}
+.ctiles.wide{grid-template-columns:repeat(auto-fill,minmax(150px,1fr))}
+@media (min-width:600px){
+  .carnet{flex-direction:row;align-items:flex-start;gap:20px}
+  .carnet .cblk{flex:1;min-width:0;background:var(--pc-papier);border-radius:24px;box-shadow:var(--pc-ombre);padding:16px}
+  .ctile{box-shadow:none;border:2px solid var(--pc-trait)}
+}
+@media (min-width:1200px){.carnet .cblk:first-child{flex:1.4}.carnet .cblk:first-child .ctiles{grid-template-columns:repeat(3,minmax(0,1fr))}}
+/* terrain en grand : sur téléphone, le paysage est conseillé */
+html.tacfull .stedit svg,html.tacfull .tacbig svg{max-height:calc(100dvh - 260px);width:100%}
+@media (orientation:landscape) and (max-height:500px){html.tacfull .hd{display:none}html.tacfull .stedit svg,html.tacfull .tacbig svg{max-height:calc(100dvh - 40px)}}
+
+/* 5.15.1 · n° 247 : bloc « Carnet du coach » du bandeau : l'entrée en cours encadrée de jaune, comme les sous-onglets d'un rôle */
+@media (min-width:600px){.tb nav.bank button.sub[aria-current="page"]{border:3px solid var(--pc-jaune);background:var(--pc-attente-fond);color:var(--pc-encre);border-radius:14px}}
+/* 5.15.2 : sur tablette et ordinateur, le bandeau de « Me montrer » reste en bas, à droite de la colonne de gauche (onglets et rôles libres) */
+@media (min-width:600px){.obbar:not(.side){left:calc(max(0px, 50% - 520px) + 252px);right:max(12px, calc(50% - 508px));bottom:16px}}
+@media (min-width:600px) and (max-width:959px){.obbar:not(.side){left:232px}}
+
+/* 5.16.0 · n° 252 : bandeau « Aujourd'hui » de l'espace Coach ; entrées du carnet dans la colonne de gauche */
+.tday{background:var(--pc-attente-fond);border:3px solid var(--pc-jaune);border-radius:22px;padding:14px 16px;display:flex;flex-direction:column;gap:6px;margin-bottom:14px}
+.tday .kick{color:var(--pc-texte-ecran)}
+.tday .tdt{font-family:var(--pc-titre);font-size:19px;color:var(--pc-texte-ecran)}
+.tday .btns{margin-top:6px;flex-wrap:wrap}
+@media (min-width:600px){
+  .tb .rsub .rsub2{display:flex;flex-direction:column;gap:2px;margin:0 0 4px 16px;padding-left:8px;border-left:2px solid var(--pc-trait)}
+  .tb .rsub .rsub2 button{min-height:38px;font-size:14px;font-weight:500}
+}
+
+/* N° 220 · site de test : pastille « TEST » en haut au centre (jamais sur mypocketclub.fr) */
+html.site-test body::after { content: 'TEST'; position: fixed; top: calc(env(safe-area-inset-top, 0px) + 2px); left: 50%; transform: translateX(-50%);
+  z-index: 2147483000; pointer-events: none; background: var(--pc-jaune); color: var(--pc-encre); font: 800 11px/1 system-ui, sans-serif;
+  letter-spacing: .12em; padding: 4px 10px; border-radius: 999px; box-shadow: 0 1px 4px rgba(0,0,0,.25); }
