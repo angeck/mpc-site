@@ -9,8 +9,9 @@
 // Rappel : chaque droit est vérifié par la base ; l'écran n'est qu'un confort.
 import { S, sb, esc, hooks, ACTIONS, INPUTS, render, toast, run, club, armed, isArmed, store, toValidate, casquettes, isCoachCasq } from './core.js';
 import { icon, SPACE_VIEWS } from './ui.js';
+import { micBtn } from './dictee.js'; // bêta 1.2.0 · n° 265 : dicter le nom et les consignes
 import { COACH_VIEWS, thumb, exosForCounts, plansForEvent, loadPlans } from './coach.js';
-import { canCallRoll, homeEvents, needsAnswer } from './agenda.js';
+import { canCallRoll, homeEvents, needsAnswer, teamTabs } from './agenda.js';
 import { normalize, stepsSvg, player, hasSteps } from './v510.js';
 
 // ---------- n° 239 et 250 · toute pastille mène à l'élément en jaune ; une fois vu, pastille et jaune s'enlèvent ----------
@@ -72,7 +73,9 @@ function paintTodo() {
     if (!rows.length && (wait.length || numNew || visit.has('lead'))) {
       LEADS.forEach((sel) => document.querySelectorAll(sel).forEach((el) => {
         if (el.closest('.tb') || el.getAttribute('aria-current') === 'page') return;
+        if (el.matches('.klink, .tlink, .ptile:not(.wait), .kcard *, .ptable *')) return; // bêta 1.1.0 : pas de jaune sur les liens des cartes de chiffres ni sur les tuiles sans urgence
         if (sel === '[data-act=tsgo][data-tab=effectif]' && !wait.length) return;
+        if (el.dataset.act === 'tsgo' && !el.dataset.id) return; // bêta 1.4.0 · n° 273 : onglet sans équipe choisie, pas un chemin vers la demande
         show(el, 'lead');
       }));
     }
@@ -114,7 +117,9 @@ function roleSubs() {
   document.querySelectorAll('.tb .rsub').forEach((x) => x.remove());
   document.querySelectorAll('.tb nav.roles button.ropen').forEach((x) => x.classList.remove('ropen'));
   if (!wide.matches) return;
-  const inRole = SPACE_VIEWS.includes(S.view?.type) || !!S.tsp;
+  // bêta 1.4.0 · n° 273 : le carnet ouvert sans équipe choisie garde le rôle Coach déplié
+  const carnetNoTeam = !S.tsp && !!CARNET_CUR[S.view?.type] && isCoachCasq(S.casq);
+  const inRole = SPACE_VIEWS.includes(S.view?.type) || !!S.tsp || carnetNoTeam;
   if (!inRole) return;
   let key = S.casq;
   if (S.tsp) { const c = casquettes().find((x) => isCoachCasq(x.k) && (x.teams || []).includes(S.tsp)); if (c) key = c.k; }   // espace d'une équipe : le rôle Coach
@@ -122,14 +127,20 @@ function roleSubs() {
   const btn = [...document.querySelectorAll('.tb nav.roles [data-act=casq]')].find((b) => b.dataset.v === key);
   if (!btn) return;
   btn.classList.add('ropen');
-  const tt = [...document.querySelectorAll('nav.ttabs')].find((n) => !n.closest('.tb'));
-  if (!tt) return;
+  // bêta 1.1.0 · n° 244 : dans la page d'une fonction ouverte par le président, le bandeau garde les onglets du président
+  // (Bureau déplié, la fonction en jaune) ; les onglets de la fonction restent en haut de la page
+  const pf = S.view?.type === 'fview' && key === 'president' && hooks.presTabsHtml;
+  let tt = pf ? null : [...document.querySelectorAll('nav.ttabs')].find((n) => !n.closest('.tb'));
+  // bêta 1.4.0 · n° 273 : rôle Coach sans équipe choisie (carnet, exercices, tactiques) : les mêmes onglets, déjà dépliés
+  if (!pf && !tt && isCoachCasq(key)) { const x = document.createElement('div'); x.innerHTML = teamTabs('', CARNET_CUR[S.view?.type] ? 'Carnet du coach' : ''); tt = x.firstElementChild; }
+  if (!pf && !tt) return;
   const sub = document.createElement('div');
   sub.className = 'rsub'; sub.setAttribute('role', 'group'); sub.setAttribute('aria-label', 'Sous-onglets du rôle');
-  sub.innerHTML = tt.innerHTML;
+  sub.innerHTML = pf ? hooks.presTabsHtml().replace(/^<nav[^>]*>/, '').replace(/<\/nav>$/, '') : tt.innerHTML;
   carnetSubs(sub, key);
+  if (key === 'president' && hooks.presSubs) hooks.presSubs(sub);
   btn.after(sub);
-  root.classList.add('rsubon');
+  if (!pf) root.classList.add('rsubon');
 }
 wide.addEventListener?.('change', () => render(true));
 
@@ -162,7 +173,7 @@ const mini = (st) => { const n = normalize(st, SPORT()); return n ? stepsSvg(n, 
 // hooks.stepsThumb / sthPlay / sthStop (v510.js), déclenchés au survol sur ordinateur et à l'écran sur téléphone (coach.js) ;
 // fixe si le mouvement réduit est demandé ; une tactique d'une seule étape reste fixe.
 const tacThumb = (t) => (hooks.stepsThumb && hooks.stepsThumb({ id: 'tac-' + t.id, steps: t.steps, title: t.title, label: 'Tactique ', sport: SPORT() })) || mini(t.steps);
-const tacTile = (t, act = 'tacopen') => `<button class="ctile" data-act="${act}" data-id="${t.id}"><span class="cthumb">${tacThumb(t)}</span><span class="ct">${esc(t.title)}</span><span class="cs">${t.steps.frames.length > 1 ? t.steps.frames.length + ' étapes' : '1 étape'}${t.sharing === 'club' ? ' · club' : ''}</span></button>`;
+const tacTile = (t, act = 'tacshow') => `<button class="ctile" data-act="${act}" data-id="${t.id}"><span class="cthumb">${tacThumb(t)}</span><span class="ct">${esc(t.title)}</span><span class="cs">${t.steps.frames.length > 1 ? t.steps.frames.length + ' étapes' : '1 étape'}${t.sharing === 'club' ? ' · club' : ''}</span></button>`;
 const exTile = (e) => `<button class="ctile" data-act="cexo" data-id="${e.id}"><span class="cthumb">${thumb(e)}</span><span class="ct">${esc(e.title)}</span><span class="cs">${esc([e.minutes ? e.minutes + ' min' : '', e.category].filter(Boolean).join(' · '))}</span></button>`;
 const addTile = (act, label, extra = '') => `<button class="ctile add" data-act="${act}" ${extra}>${icon('plus', 26)}<span class="ct">${label}</span></button>`;
 
@@ -216,7 +227,8 @@ function tacticsPage() {
 function tacEditPage() {
   const f = S.exf; if (!f?.tac) return '<p class="empty">Tactique introuvable.</p>';
   const ed = COACH_VIEWS.exsteps()[2]().replace(/<button type="button" class="btn main" data-act="back">Terminé<\/button>/, `<button type="button" class="btn main" data-act="tacsave">Enregistrer la tactique</button>`);
-  return `<div class="card lift"><div class="field"><label for="tactitle">Nom de la tactique</label><input id="tactitle" data-tactitle="1" maxlength="80" value="${esc(f.title || '')}" placeholder="Ex. Remise en jeu"></div>
+  return `<div class="card lift"><div class="field"><label for="tactitle">Nom de la tactique</label><input id="tactitle" data-tactitle="1" maxlength="80" value="${esc(f.title || '')}" placeholder="Ex. Remise en jeu">${micBtn('tactitle', 'Dicter le nom')}</div>
+  <div class="field"><label for="tacnotes">Consignes (facultatif)</label><textarea id="tacnotes" data-tacnotes="1" maxlength="2000" rows="4" placeholder="Ex. le meneur fixe à gauche, le pivot monte l'écran, tir au poste 2">${esc(f.notes || '')}</textarea>${micBtn('tacnotes', 'Dicter les consignes', true)}</div>
   <label class="check"><input type="checkbox" data-tacshare="1" ${f.sharing === 'club' ? 'checked' : ''}><span>Partager avec les coachs du club</span></label></div>${ed}
   ${f.id ? `<button class="btn danger ${isArmed('tacdel') ? 'armed' : ''}" data-act="tacdel">${icon('trash', 20)}${isArmed('tacdel') ? 'Confirmer la suppression' : 'Supprimer la tactique'}</button>` : ''}`;
 }
@@ -225,7 +237,7 @@ function tacEditPage() {
 function tacShowPage(v) {
   const t = (S.tactics || []).find((x) => x.id === v.id); if (!t) return '<p class="empty">Tactique introuvable.</p>';
   const st = normalize(t.steps, t.sport || SPORT());
-  return `<div class="card tacbig">${player(st, 'tac' + t.id)}</div>${t.created_by === S.me.id ? `<button class="btn ghost" data-act="tacopen" data-id="${t.id}">Modifier</button>` : ''}`;
+  return `<div class="card tacbig">${player(st, 'tac' + t.id)}</div>${t.notes ? `<div class="card"><div class="kick">Consignes</div><p style="white-space:pre-wrap;margin:0">${esc(t.notes)}</p></div>` : ''}${t.created_by === S.me.id ? `<button class="btn ghost" data-act="tacopen" data-id="${t.id}">Modifier</button>` : ''}`;
 }
 
 // Le terrain en direct (avant ou pendant un match) : dessiner sans rien enregistrer, ou rejouer une tactique
@@ -249,6 +261,7 @@ COACH_VIEWS.terrain = () => ['Tactiques', 'Terrain', terrainPage];
 
 INPUTS.push((t) => {
   if (t.matches?.('[data-tactitle]') && S.exf?.tac) { S.exf.title = t.value.slice(0, 80); return true; }
+  if (t.matches?.('[data-tacnotes]') && S.exf?.tac) { S.exf.notes = t.value.slice(0, 2000); return true; }
   if (t.matches?.('[data-tacshare]') && S.exf?.tac) { S.exf.sharing = t.checked ? 'club' : 'me'; return true; }
   return false;
 });
@@ -273,7 +286,7 @@ Object.assign(ACTIONS, {
   tacopen: async (el, d) => {
     await loadTactics(); const t = S.tactics.find((x) => x.id === d.id); if (!t) return toast('Tactique introuvable.');
     if (t.created_by !== S.me.id) return openView({ type: 'tacshow', id: t.id });
-    S.exf = { tac: true, id: t.id, sport: t.sport, title: t.title, sharing: t.sharing, steps: normalize(t.steps, t.sport) }; S.stEd = { i: 0, sel: null, prev: false };
+    S.exf = { tac: true, id: t.id, sport: t.sport, title: t.title, notes: t.notes || '', hadNotes: !!t.notes, sharing: t.sharing, steps: normalize(t.steps, t.sport) }; S.stEd = { i: 0, sel: null, prev: false };
     openView({ type: 'tac' });
   },
   tacshow: async (el, d) => { await loadTactics(); openView({ type: 'tacshow', id: d.id }); },
@@ -284,9 +297,16 @@ Object.assign(ACTIONS, {
     const f = S.exf; if (!f?.tac) return;
     const title = (f.title || '').trim(); if (!title) { toast('Donne un nom à la tactique.'); document.getElementById('tactitle')?.focus(); return; }
     const row = { title, sport: f.sport || SPORT(), steps: f.steps, sharing: f.sharing === 'club' ? 'club' : 'me', updated_at: new Date().toISOString() };
-    const q = f.id ? sb.from('tactics').update(row).eq('id', f.id) : sb.from('tactics').insert({ ...row, club_id: S.clubId });
-    if (!(await run(q, 'Tactique enregistrée.'))) return;
-    await loadTactics(true); dropTac(); S.noStack = true; openView({ type: 'tactics' });
+    // bêta 1.2.0 · n° 265 : consignes (dictées ou tapées) ; envoyées seulement si remplies ou déjà présentes (base sans le script 1.2.0 : la tactique s'enregistre quand même)
+    const notes = (f.notes || '').trim().slice(0, 2000); if (notes || f.hadNotes) row.notes = notes;
+    const q = f.id ? sb.from('tactics').update(row).eq('id', f.id) : sb.from('tactics').insert({ ...row, club_id: S.clubId }).select('id').single();
+    const res = await run(q, 'Tactique enregistrée.'); if (!res) return;
+    await loadTactics(true);
+    // bêta 1.5.0 · n° 275 : une fois enregistrée, la tactique s'ouvre en lecture (« Modifier » rouvre l'éditeur)
+    const sid = f.id || res?.id, saved = S.tactics.find((x) => x.id === sid) || S.tactics.find((x) => x.created_by === S.me.id && x.title === title);
+    dropTac(); S.noStack = true;
+    if (saved) S.stack = (S.stack || []).filter((v) => !(v.type === 'tacshow' && v.id === saved.id)); // pas de doublon au retour
+    openView(saved ? { type: 'tacshow', id: saved.id } : { type: 'tactics' });
   },
   tacdel: async () => {
     const f = S.exf; if (!f?.id || !armed('tacdel')) return;

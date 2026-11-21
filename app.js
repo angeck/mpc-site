@@ -34,6 +34,7 @@ import './js/v511.js'; // 5.11.0 : n° 227 banque d'exercices dans le menu de ga
 import './js/v56.js'; // 5.6.0 : n° 202 compte administrateur (espace admin, double vérification)
 import './js/v515.js'; // 5.15.0 : n° 239, 242, 243, 246
 import './js/v517.js'; // 5.17.0 : n° 254 (gymnases du club), n° 257 (notifications proposées après une demande)
+import './js/b110.js'; // bêta 1.1.0 : n° 244 (espace Président « pro », aperçu de chaque fonction au même modèle)
 import './js/v55.js'; // 5.5.0 : onboarding « Pour bien démarrer », FAQ (Aide), n° 164 justificatif d'adhésion
 import { validationReminders } from './js/v54.js'; // 5.4.0 : n° 201 (conversation avec un mineur), n° 84 (rattacher), transfert d'une convocation, n° 182
 import './js/v51.js'; // 5.1.0 : n° 189 (retour du téléphone), 190 (pastilles des rôles), 191 (demandes), 196 (bienvenue)
@@ -102,6 +103,7 @@ function render(keep) {
   if (ouv) { const m = document.querySelector('meta[name=theme-color]'); if (m) m.content = '#11162E'; }
   app.innerHTML = switchBar() + html;
   document.documentElement.classList.toggle('notb', !app.querySelector('.tb')); // 5.12.1 · n° 231 : sans onglets (ouverture, connexion, textes légaux), pas de colonne réservée à gauche
+  document.documentElement.classList.toggle('prov', !!app.querySelector('main [data-pro]')); // bêta 1.1.0 · n° 244 : pages « pro » (président, fonctions) plus larges sur ordinateur
   window.scrollTo(0, y);
   onScroll();
   mountCaptcha();
@@ -119,7 +121,11 @@ async function refresh(msg) {
   if (S.me && S.devFor !== S.me.id) { S.devFor = S.me.id; registerDevice().then(loadDevices); } // n° 147 ; 4.10.0 : la liste des appareils suit : appareil connu ou nouveau (alerte par e-mail)
   if (!S.joinChecked) { S.joinChecked = true; await openPendingJoin(); await acceptParentInvite(); }
   if (!S.purged) { S.purged = true; sb.rpc('purge_trash').then(() => {}, () => {}); validationReminders().catch(() => {}); } // 5.4.0 · n° 182 : rappels de validation par e-mail
+  if (S.openFiche && S.me) { const f = S.openFiche; if (S.clubs[f.club] && f.club !== S.clubId) { S.clubId = f.club; try { localStorage.setItem('pc_club', f.club); } catch { /* sans stockage */ } S.tab = 0; S.names = {}; S.attMine = undefined; } } // n° 264
+  if (S.openGo && S.me && S.clubs[S.openGo.club] && S.openGo.club !== S.clubId) { S.clubId = S.openGo.club; try { localStorage.setItem('pc_club', S.openGo.club); } catch { /* sans stockage */ } S.tab = 0; S.names = {}; S.attMine = undefined; } // bêta 1.5.0 · n° 278
   await loadClub();
+  if (S.openGo && S.me) { const g = S.openGo; S.openGo = null; if (g.club === S.clubId) { S.stack = []; try { if (g.to === 'heures') ACTIONS.fview(null, { v: 'Trésorier', tab: 'heures' }); else if (g.to === 'exos') ACTIONS.cexos(null, { tab: 'club' }); else if (g.to === 'bureau') ACTIONS.ptab(null, { v: 'bureau' }); } catch (e) { console.warn('ouvrir', e); } } }
+  if (S.openFiche && S.me) { const f = S.openFiche; S.openFiche = null; if (f.club === S.clubId && S.players.some((x) => x.id === f.player)) { S.view = { type: 'player', id: f.player }; S.stack = []; } } // n° 264
   restoreDraftScreen(); // 5.2.1 : après un rechargement, retour là où la saisie avait commencé
   await Promise.all([loadCoachCounts(), loadEvPlans(), loadAdminCounts(), loadV310(), loadV43(), loadV44(), loadV57()]).catch(() => {});
   if (S.view?.type === 'group') await loadGroup(S.view.id);
@@ -278,6 +284,18 @@ try { window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change
 window.addEventListener('offline', () => { S.online = false; render(true); });
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && S.session && navigator.onLine) { S.bgRefresh = true; refresh(); } });
 captureParentToken(); // 5.3.0 : lien #parent=… de l'e-mail d'invitation, gardé jusqu'à la connexion
+// bêta 1.2.2 · n° 264 : lien « #fiche=<club>.<joueur> » d'une notification (attestation prête ou refusée) : ouvre la fiche, change de club si besoin
+function captureFiche() {
+  const m = /^#fiche=([0-9a-f-]{36})\.([0-9a-f-]{36})$/.exec(location.hash || ''); if (!m) return false;
+  S.openFiche = { club: m[1], player: m[2] }; history.replaceState(null, '', location.pathname + location.search); return true;
+}
+// bêta 1.5.0 · n° 278 : lien « #ouvrir=<club>.heures » ou « .exos » d'une notification : ouvre l'écran où il y a quelque chose à traiter
+function captureGo() {
+  const m = /^#ouvrir=([0-9a-f-]{36})\.(heures|exos|bureau)$/.exec(location.hash || ''); if (!m) return false; // bureau : bêta 1.5.1, fonction sans titulaire
+  S.openGo = { club: m[1], to: m[2] }; history.replaceState(null, '', location.pathname + location.search); return true;
+}
+captureFiche(); captureGo();
+window.addEventListener('hashchange', () => { if ((captureFiche() || captureGo()) && S.session) refresh(); });
 sb.auth.onAuthStateChange(async (ev, session) => {
   if (session) { saveSwitch(session); if (S.uid && S.uid !== session.user.id) resetUser(); S.uid = session.user.id; } else S.uid = null;
   if (ev === 'TOKEN_REFRESHED') { S.session = session; return; }

@@ -4,10 +4,13 @@
 import { BRAND } from '../config.js';
 import {
   S, sb, esc, run, toast, render, hooks, armed, isArmed, ACTIONS, FORMS, INPUTS, CHANGES, club, isBoard, isCoach, coachTeams, coachOf,
-  team, teamName, name, plural, download, norm, fmtShort, onColor, evTeams, store, loadNames, isPresident, hasArea, durOf,
+  team, teamName, name, plural, download, norm, fmtShort, onColor, evTeams, store, loadNames, isPresident, hasArea, durOf, canAllStats,
 } from './core.js';
 import { icon, delBtn, field } from './ui.js';
+import { micBtn } from './dictee.js'; // bêta 1.2.0 · n° 265 : dicter la description
 import { loadXlsx } from './equipe.js';
+import { openStatsPdf } from './statspdf.js'; // bêta 1.5.0 · n° 279
+import { showDoc } from './docview.js'; // bêta 1.5.1 · n° 285
 import { loadDuplicates, dupBlock, dupListBlock } from './v410.js';
 
 export const CATS = ['Échauffement', 'Technique', 'Tactique', 'Physique', 'Jeu', 'Retour au calme'];
@@ -40,7 +43,11 @@ const monthStart = (d) => new Date(d.getFullYear(), d.getMonth(), 1);
 const monthLabel = (d) => { const s = d.toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' }); return s.charAt(0).toUpperCase() + s.slice(1); };
 const stamp = () => { const d = new Date(); return d.toLocaleDateString('sv-SE') + ' ' + String(d.getHours()).padStart(2, '0') + 'h' + String(d.getMinutes()).padStart(2, '0'); };
 const cleanFile = (s) => String(s || '').replace(/[\\/:*?"<>|]/g, '');
-const staffTeams = () => (isBoard() ? S.teams.filter((t) => !t.deleted_at && t.state !== 'Archivée').map((t) => t.id) : coachTeams().filter((t) => team(t)));
+// bêta 1.6.0 · n° 286 : dans l'espace coach, chacun ne voit que les équipes dont il est coach, même s'il est du bureau ;
+// toutes les équipes seulement pour les statistiques ouvertes depuis l'espace président (président, vice-président, directeur technique)
+const allTeams = () => S.teams.filter((t) => !t.deleted_at && t.state !== 'Archivée').map((t) => t.id);
+const staffTeams = () => coachTeams().filter((t) => team(t));
+const statTeams = () => (S.st?.all && canAllStats() ? allTeams() : staffTeams());
 export const canCoachSpace = () => isBoard() || isCoach();
 
 // ---------- chargement ----------
@@ -148,7 +155,7 @@ async function bulkVideos(files) {
   await loadExos(); render(true);
   toast(`${plural(ok.length, 'vidéo ajoutée', 'vidéos ajoutées')}.${ko.length ? ' Sans exercice du même nom : ' + ko.join(', ') + '.' : ''}`, ko.length ? 9000 : undefined);
 }
-export async function loadEvPlans() { S.evPlans = canCoachSpace() ? ((await sb.from('training_plans').select('id,title,event_id,team_id,items,notes').not('event_id', 'is', null).is('deleted_at', null).limit(300)).data || []) : []; }
+export async function loadEvPlans() { S.evPlans = canCoachSpace() ? ((await sb.from('training_plans').select('id,title,event_id,team_id,items,notes,updated_at,staff_notified_at').not('event_id', 'is', null).is('deleted_at', null).limit(300)).data || []) : []; }
 // n° 135 : la liste chargée appartient à un compte et à un club ; après un changement de profil de test ou de club, elle est rechargée
 const exosKey = () => (S.me?.id || '') + ':' + (S.clubId || '');
 export const exosFresh = () => !!S.exos && S.exosKey === exosKey();
@@ -372,7 +379,7 @@ export function exoForm() {
   ${field('exc', 'Catégorie', `<select id="exc" name="category">${CATS.map((x) => `<option ${f.category === x ? 'selected' : ''}>${x}</option>`).join('')}</select>`)}
   ${field('exl', 'Niveau', `<select id="exl" name="level"><option value="">Non précisé</option>${LEVELS.concat(f.level && !LEVELS.includes(f.level) ? [f.level] : []).map((x) => `<option ${f.level === x ? 'selected' : ''}>${esc(x)}</option>`).join('')}</select>`)}
   ${field('exd', 'Durée (minutes)', `<input id="exd" name="duration_min" type="number" min="1" max="120" required value="${esc(f.duration_min || 10)}">`)}</div>
-  ${field('exde', 'Description', `<textarea id="exde" name="description" maxlength="4000" rows="7" placeholder="Mise en place, déroulement, consignes, variantes">${esc(f.description || '')}</textarea>`)}
+  ${field('exde', 'Description', `<textarea id="exde" name="description" maxlength="4000" rows="7" placeholder="Mise en place, déroulement, consignes, variantes">${esc(f.description || '')}</textarea>${micBtn('exde', 'Dicter la description', true)}`)}
   <div class="field"><span class="lab">Tags (${tags.size} choisis)</span>${Object.entries(tagsFor(sp)).map(([th, l]) => [th, l.concat(TAGS[th].filter((t) => tags.has(t) && !l.includes(t)))]).map(([th, l]) => `<div class="tagrow"><span class="det">${esc(th)}</span><div class="chips">${l.map((t) => `<button type="button" class="chip" data-act="extag" data-v="${esc(t)}" aria-pressed="${tags.has(t)}">${esc(t)}</button>`).join('')}</div></div>`).join('')}</div>
   <div class="field"><span class="lab">Origine</span><div class="chips">${Object.entries(ORIGINS).map(([k, l]) => `<label class="chip" style="display:flex;align-items:center;gap:6px"><input type="radio" name="origin" value="${k}" data-exre="1" ${f.origin === k ? 'checked' : ''}>${l}</label>`).join('')}</div></div>
   ${f.origin === 'adapte' ? field('exso', 'Source (livre, site, formation, auteur)', `<input id="exso" name="source" required maxlength="300" value="${esc(f.source || '')}">`) : ''}
@@ -418,6 +425,7 @@ export function planEditor() {
     : '<p class="empty">Aucun exercice dans cette séance pour l’instant.</p>';
   h += `${field('pn', 'Notes (matériel, consignes)', `<textarea id="pn" name="notes" maxlength="2000" rows="3">${esc(p.notes)}</textarea>`)}
   <div class="btns"><button class="btn main" type="submit">${p.id ? 'Enregistrer la séance' : 'Enregistrer la séance'}</button>${p.items.length ? '<button type="button" class="btn ghost" data-act="pprint">Imprimer / PDF</button>' : ''}</div>
+  ${notifyBlock(p)}
   ${p.items.length ? '<button type="button" class="btn ghost" data-act="ptplsave">Enregistrer comme séance type</button>' : ''}
   <div class="btns"><button type="button" class="btn ghost small" data-act="pnew">Nouvelle séance vide</button><button type="button" class="btn ghost small" data-act="cplans">Mes séances et séances types</button></div></form>`;
   return h;
@@ -432,6 +440,28 @@ export function plansPage() {
   return (tpl.length ? `<div class="sec"><h2>Séances types</h2></div><div class="card"><div class="list">${tpl.map(row).join('')}</div></div>` : '')
     + (pl.length ? `<div class="sec"><h2>Séances</h2></div><div class="card"><div class="list">${pl.map(row).join('')}</div></div>` : '');
 }
+// bêta 1.2.2 · n° 268 : « Prévenir l'encadrement » (séance enregistrée, reliée à un entraînement de l'équipe) :
+// une notification aux autres coachs de l'équipe, assistants compris ; le coach décide quand la séance est prête
+// (pas d'envoi automatique : il enregistre souvent en plusieurs fois). Après une modification : « Prévenir : séance modifiée ».
+function planNotice(p) {
+  const row = (S.evPlans || []).find((x) => x.id === p.id) || (S.plans || []).find((x) => x.id === p.id) || {};
+  const at = p.notified !== undefined ? p.notified : row.staff_notified_at || null;
+  const dirty = p.dirty !== undefined ? p.dirty : !!(at && row.updated_at && new Date(row.updated_at) - new Date(at) > 2000);
+  return { at, dirty };
+}
+function notifyBlock(p) {
+  if (!p.id || !p.event_id || !p.team_id) return '';
+  const n = planNotice(p), lab = !n.at ? 'Prévenir l’encadrement' : n.dirty ? 'Prévenir : séance modifiée' : 'Encadrement prévenu · prévenir encore';
+  return `<div class="card pale" style="box-shadow:none"><button type="button" class="btn ${!n.at || n.dirty ? 'main' : 'ghost'}" data-act="pnotify">${icon('bell', 20)}${lab}</button><p class="note" style="margin:0">Enregistre la séance puis envoie une notification aux autres coachs de l’équipe, assistants compris.${n.at ? ' Dernier envoi : ' + esc(new Date(n.at).toLocaleString('fr-FR', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })) + '.' : ''}</p></div>`;
+}
+ACTIONS.pnotify = async () => {
+  await FORMS.planf(); const p = S.plan; if (!p?.id) return;
+  const n = await run(sb.rpc('notify_plan_staff', { p_plan: p.id }));
+  if (n === null || n === undefined) return;
+  p.notified = new Date().toISOString(); p.dirty = false; savePlanLocal();
+  toast(n ? (n > 1 ? n + ' coachs prévenus.' : 'Un coach prévenu.') : 'Personne d’autre n’encadre cette équipe : aucune notification envoyée.');
+  render(true);
+};
 // Appel en tuiles : « Ajouter un exercice » ouvre la séance reliée à l'entraînement (ou en crée une)
 export function openPlanForEvent(e) {
   const p = plansForEvent(e.id)[0];
@@ -440,10 +470,8 @@ export function openPlanForEvent(e) {
 }
 export const plansForEvent = (eid) => (S.evPlans || []).filter((p) => p.event_id === eid);
 function printHtml(title, body) {
-  const w = window.open('', '_blank'); if (!w) { toast('Autorise les fenêtres pour imprimer ou enregistrer en PDF.'); return; }
   const c = club()?.color1 || '#2F5BFF';
-  w.document.write(`<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>${esc(title)}</title><style>body{font-family:Figtree,Arial,sans-serif;color:#0B2416;margin:24px}h1{font-size:22px;margin:0 0 4px;color:${c}}p{margin:4px 0}table{border-collapse:collapse;width:100%;font-size:12px;margin-top:12px}th{background:${c};color:${onColor(c)};text-align:left}th,td{border:1px solid #CCD3E0;padding:4px 6px}td.P{background:#C8F0D4}td.R{background:#FFE8A3}td.A{background:#FFC9C9}.ex{border:1px solid #CCD3E0;border-radius:10px;padding:10px;margin:10px 0;page-break-inside:avoid}.ex svg{max-width:360px}.foot{margin-top:16px;font-size:11px;color:#667}@page{margin:12mm}</style></head><body>${body}<p class="foot">${esc(BRAND.name)} · ${esc(club()?.name || '')} · imprimé le ${new Date().toLocaleDateString('fr-FR')}</p><script>setTimeout(function(){print()},300)<\/script></body></html>`);
-  w.document.close();
+  showDoc(`<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>${esc(title)}</title><style>body{font-family:Figtree,Arial,sans-serif;color:#0B2416;margin:24px}h1{font-size:22px;margin:0 0 4px;color:${c}}p{margin:4px 0}table{border-collapse:collapse;width:100%;font-size:12px;margin-top:12px}th{background:${c};color:${onColor(c)};text-align:left}th,td{border:1px solid #CCD3E0;padding:4px 6px}td.P{background:#C8F0D4}td.R{background:#FFE8A3}td.A{background:#FFC9C9}.ex{border:1px solid #CCD3E0;border-radius:10px;padding:10px;margin:10px 0;page-break-inside:avoid}.ex svg{max-width:360px}.foot{margin-top:16px;font-size:11px;color:#667}@page{margin:12mm}</style></head><body>${body}<p class="foot">${esc(BRAND.name)} · ${esc(club()?.name || '')} · imprimé le ${new Date().toLocaleDateString('fr-FR')}</p></body></html>`, { title }); // bêta 1.5.1 · n° 285 : dans l'appli
 }
 function printPlan(p) {
   const e = S.events.find((x) => x.id === p.event_id);
@@ -466,8 +494,9 @@ async function loadStats() {
 }
 const pct = (a, b) => (b ? Math.round((100 * a) / b) + ' %' : '—');
 export function statsPage() {
-  const teams = staffTeams(); S.st = S.st || { team: teams[0] || '', period: 'saison' };
-  const st = S.st;
+  S.st = S.st || { all: canAllStats(), team: '', period: 'saison' };
+  const teams = statTeams(), st = S.st;
+  if (!teams.includes(st.team)) st.team = teams[0] || '';
   if (!teams.length) return '<p class="empty">Aucune équipe à suivre.</p>';
   let h = `<div class="chips">${teams.map((t) => `<button class="chip" data-act="stteam" data-id="${t}" aria-pressed="${st.team === t}">${esc(teamName(t))}</button>`).join('')}</div>
   <div class="chips">${[['mois', 'Ce mois'], ['3mois', '3 derniers mois'], ['saison', 'Saison']].map(([k, l]) => `<button class="chip" data-act="stper" data-v="${k}" aria-pressed="${st.period === k}">${l}</button>`).join('')}</div>`;
@@ -476,7 +505,7 @@ export function statsPage() {
   if (!sessions) return h + '<div class="card"><p class="empty">Aucune séance pointée sur cette période.</p><p class="note">Seules les séances dont l’appel est fait comptent. Fais l’appel depuis le rendez-vous.</p></div>';
   const tot = st.rows.reduce((o, r) => ({ s: o.s + r.sessions, p: o.p + r.present + r.late, l: o.l + r.late, ya: o.ya + r.yes_absent, an: o.an + r.answered }), { s: 0, p: 0, l: 0, ya: 0, an: 0 });
   h += `<div class="grid2"><div class="card lift"><span class="big">${pct(tot.p, tot.s)}</span><span class="det">assiduité · ${plural(sessions, 'séance pointée', 'séances pointées')}</span></div><div class="card lift"><span class="big">${pct(tot.an, tot.s)}</span><span class="det">réponses données avant la séance</span></div></div>`;
-  h += `<div class="btns"><button class="btn" data-act="stxlsx">${icon('down', 20)}Excel</button><button class="btn ghost" data-act="stpdf">${icon('doc', 20)}PDF</button></div>`;
+  h += `<div class="btns"><button class="btn" data-act="stxlsx">${icon('down', 20)}Excel</button><button class="btn ghost" data-act="stpdf">${icon('doc', 20)}PDF</button></div><button class="klink" data-act="stpdfn" style="align-self:flex-start">Tableau détaillé avec les noms (PDF)</button>`;
   h += `<div class="card" style="overflow-x:auto"><table class="tbl"><thead><tr><th>Joueur</th><th>Présence</th><th>Retards</th><th>Absences</th><th>A répondu</th><th>Oui mais absent</th><th>Non mais venu</th></tr></thead><tbody>${st.rows.map((r) => `<tr><td><b>${esc(r.first_name)} ${esc(r.last_name)}</b></td><td>${pct(r.present + r.late, r.sessions)}</td><td>${r.late}</td><td>${r.absent}</td><td>${pct(r.answered, r.sessions)}</td><td>${r.yes_absent ? `<span class="pill ko">${r.yes_absent}</span>` : 0}</td><td>${r.no_present}</td></tr>`).join('')}</tbody></table></div>`;
   h += '<p class="note">Fiabilité : « Oui mais absent » = a répondu « Je viens » puis n’est pas venu. Un retard compte comme une présence. Une séance sans appel ne compte pas.</p>';
   return h;
@@ -529,24 +558,45 @@ async function loadHours() {
 const monthNav = (h) => `<div class="btns" style="align-items:center"><button class="btn ghost small" style="flex:none;width:52px;padding:0" data-act="hmonth" data-v="-1" aria-label="Mois précédent">‹</button><b style="flex:1;text-align:center;font-size:18px">${monthLabel(h.month)}</b><button class="btn ghost small" style="flex:none;width:52px;padding:0" data-act="hmonth" data-v="1" aria-label="Mois suivant" ${monthStart(h.month) >= monthStart(new Date()) ? 'disabled' : ''}>›</button></div>`;
 const STATE = { submitted: '<span class="pill wait">Envoyé au bureau</span>', validated: '<span class="pill ok">Validé</span>', refused: '<span class="pill ko">Refusé</span>' };
 function byTeam(lines) { const m = {}; lines.forEach((l) => { const k = l.team_id ? teamName(l.team_id) || 'Équipe supprimée' : 'Sans équipe'; m[k] = (m[k] || 0) + l.minutes; }); return Object.entries(m).sort((a, b) => b[1] - a[1]); }
+// bêta 1.5.1 · n° 284 : un relevé par équipe (clé '' = lignes « Sans équipe ») ; un ancien relevé « tout le mois » (whole) couvre tout
+const tkey = (t) => t || '';
+const tlabel = (t) => (t ? teamName(t) || 'Équipe supprimée' : 'Sans équipe');
+const stOf = (stmts, u, t) => stmts.find((x) => x.user_id === u && x.whole) || stmts.find((x) => x.user_id === u && !x.whole && tkey(x.team_id) === tkey(t));
+const sentT = (stmts, u, t) => { const x = stOf(stmts, u, t); return !!x && x.status !== 'refused'; };
+function groupsOf(lines, first) {
+  const m = new Map(); lines.forEach((l) => { const k = tkey(l.team_id); m.set(k, (m.get(k) || 0) + l.minutes); });
+  return [...m.entries()].map(([t, min]) => ({ t, min, label: tlabel(t) })).sort((a, b) => (a.t === tkey(first) ? -1 : b.t === tkey(first) ? 1 : a.label.localeCompare(b.label, 'fr')));
+}
+function overall(stmts, u, groups) {
+  const all = stmts.find((x) => x.user_id === u && x.whole); if (all) return STATE[all.status];
+  if (!groups.length) return '<span class="pill">Pas encore envoyé</span>';
+  const sts = groups.map((g) => stOf(stmts, u, g.t)), sent = sts.filter((x) => x && x.status !== 'refused');
+  if (!sent.length) return sts.some((x) => x?.status === 'refused') ? STATE.refused : '<span class="pill">Pas encore envoyé</span>';
+  if (sent.length < groups.length) return `<span class="pill wait">${sent.length} / ${groups.length} équipes envoyées</span>`;
+  return sent.every((x) => x.status === 'validated') ? STATE.validated : STATE.submitted;
+}
 export function hoursPage() {
   const h = S.hr; if (!h.lines) return monthNav(h) + loading();
-  const st = h.stmts[0], locked = st && st.status !== 'refused', tot = h.lines.reduce((a, l) => a + l.minutes, 0);
-  let out = monthNav(h) + `<div class="card lift" style="flex-direction:row;align-items:center;justify-content:space-between"><span class="big">${fmtMin(tot)}</span><span>${st ? STATE[st.status] : '<span class="pill">Pas encore envoyé</span>'}</span></div>`;
-  if (st?.status === 'refused' && st.comment) out += `<div class="card warn"><b>Refusé par ${esc(name(st.decided_by))}</b><span class="note" style="color:var(--pc-texte-ecran)">« ${esc(st.comment)} » · corrige puis renvoie.</span></div>`;
-  if (st?.status === 'validated') out += `<p class="note">Validé par ${esc(name(st.decided_by))} le ${new Date(st.decided_at).toLocaleDateString('fr-FR')}.</p>`;
-  const bt = byTeam(h.lines);
-  if (bt.length > 1) out += `<div class="chips">${bt.map(([k, v]) => `<span class="pill blue">${esc(k)} : ${fmtMin(v)}</span>`).join('')}</div>`;
-  out += `<div class="card"><div class="list">${h.lines.length ? h.lines.map((l) => `<div class="row static"><span class="g">${new Date(l.day + 'T12:00').toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric', month: 'short' })} · ${esc(l.kind)}<small>${[teamName(l.team_id), l.note].filter(Boolean).map(esc).join(' · ')}</small></span><b>${fmtMin(l.minutes)}</b>${locked ? '' : `<button class="btn ghost small" style="flex:none;width:48px;padding:0" data-act="hdel" data-id="${l.id}" aria-label="Retirer">${icon('trash', 18)}</button>`}</div>`).join('') : '<p class="empty">Aucune heure ce mois-ci.</p>'}</div></div>`;
-  if (!locked) {
-    out += `<button class="btn" data-act="hfill">${icon('refresh', 20)}Ajouter mes séances du mois</button><p class="note">Ajoute les entraînements, matchs, plateaux et tournois passés de tes équipes, avec la durée de chaque rendez-vous (n° 80). Ajuste ensuite si besoin.</p>`;
-    const teams = coachTeams().filter((t) => team(t));
+  const me = S.me.id, tot = h.lines.reduce((a, l) => a + l.minutes, 0), groups = groupsOf(h.lines, h.team);
+  const whole = h.stmts.find((x) => x.user_id === me && x.whole), wholeLocked = whole && whole.status !== 'refused';
+  let out = monthNav(h) + `<div class="card lift" style="flex-direction:row;align-items:center;justify-content:space-between"><span class="big">${fmtMin(tot)}</span><span>${overall(h.stmts, me, groups)}</span></div>`;
+  h.stmts.filter((x) => x.user_id === me && x.status === 'refused' && x.comment).forEach((x) => { out += `<div class="card warn"><b>Refusé par ${esc(name(x.decided_by))}${x.whole ? '' : ' · ' + esc(tlabel(x.team_id))}</b><span class="note" style="color:var(--pc-texte-ecran)">« ${esc(x.comment)} » · corrige puis renvoie.</span></div>`; });
+  h.stmts.filter((x) => x.user_id === me && x.status === 'validated').forEach((x) => { out += `<p class="note">${x.whole ? '' : esc(tlabel(x.team_id)) + ' : '}validé par ${esc(name(x.decided_by))} le ${new Date(x.decided_at).toLocaleDateString('fr-FR')}.</p>`; });
+  // Envoi équipe par équipe : un bouton par équipe (n° 284)
+  if (groups.length && !whole) out += `<div class="card"><div class="kick">Envoi au bureau, équipe par équipe</div><div class="list">${groups.map((g) => {
+    const x = stOf(h.stmts, me, g.t), sent = x && x.status !== 'refused', key = 'hsend:' + g.t;
+    return `<div class="row static" data-hgrp="${esc(g.t)}"><span class="g">${esc(g.label)}<small>${fmtMin(g.min)}</small></span>${sent ? STATE[x.status] : `<button class="btn ${isArmed(key) ? 'main armed' : 'main'} small" style="flex:none;width:auto" data-act="hsend" data-t="${esc(g.t)}">${isArmed(key) ? 'Confirmer (' + fmtMin(g.min) + ')' : x?.status === 'refused' ? 'Renvoyer' : 'Envoyer'}</button>`}</div>`;
+  }).join('')}</div><p class="note">Une équipe envoyée ne se modifie plus, sauf si le bureau la refuse. Les autres restent modifiables.</p></div>`;
+  const lineLocked = (l) => wholeLocked || sentT(h.stmts, me, l.team_id);
+  out += `<div class="card"><div class="list">${h.lines.length ? h.lines.map((l) => `<div class="row static"><span class="g">${new Date(l.day + 'T12:00').toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric', month: 'short' })} · ${esc(l.kind)}<small>${[teamName(l.team_id), l.note].filter(Boolean).map(esc).join(' · ')}</small></span><b>${fmtMin(l.minutes)}</b>${lineLocked(l) ? '' : `<button class="btn ghost small" style="flex:none;width:48px;padding:0" data-act="hdel" data-id="${l.id}" aria-label="Retirer">${icon('trash', 18)}</button>`}</div>`).join('') : '<p class="empty">Aucune heure ce mois-ci.</p>'}</div></div>`;
+  const teams = coachTeams().filter((t) => team(t) && !sentT(h.stmts, me, t)), noTeamOk = !sentT(h.stmts, me, null);
+  if (!wholeLocked && (teams.length || noTeamOk)) {
+    out += `<button class="btn" data-act="hfill">${icon('refresh', 20)}Ajouter mes séances du mois</button><p class="note">Ajoute les entraînements, matchs, plateaux et tournois passés de tes équipes, avec la durée de chaque rendez-vous (n° 80). Les équipes déjà envoyées ne bougent pas.</p>`;
     out += `<form id="hf" class="card"><div class="kick">Ajouter une ligne</div><div class="grid2">${field('hd', 'Date', `<input id="hd" name="day" type="date" required value="${ymd(new Date() < new Date(monthStart(h.month).getFullYear(), monthStart(h.month).getMonth() + 1, 1) ? new Date() : new Date(monthStart(h.month).getFullYear(), monthStart(h.month).getMonth() + 1, 0))}" max="${ymd(new Date())}">`)}
     ${field('hk', 'Type', `<select id="hk" name="kind">${KINDS_H.map((k) => `<option>${k}</option>`).join('')}</select>`)}
-    ${field('ht', 'Équipe', `<select id="ht" name="team_id"><option value="">Sans équipe</option>${teams.map((t) => `<option value="${t}">${esc(teamName(t))}</option>`).join('')}</select>`)}
+    ${field('ht', 'Équipe', `<select id="ht" name="team_id">${noTeamOk ? '<option value="">Sans équipe</option>' : ''}${teams.map((t) => `<option value="${t}" ${tkey(h.team) === t ? 'selected' : ''}>${esc(teamName(t))}</option>`).join('')}</select>`)}
     ${field('hm', 'Durée (minutes)', `<input id="hm" name="minutes" type="number" min="5" max="720" step="5" required value="90">`)}</div>
     ${field('hn', 'Note (facultatif)', `<input id="hn" name="note" maxlength="200" placeholder="Ex. réunion parents">`)}<button class="btn main small" type="submit">Ajouter</button></form>`;
-    if (h.lines.length) out += `<button class="btn main ${isArmed('hsend') ? 'armed' : ''}" data-act="hsend">${isArmed('hsend') ? 'Confirmer l’envoi (' + fmtMin(tot) + ')' : 'Envoyer ' + monthLabel(h.month).toLowerCase() + ' au bureau'}</button><p class="note">Une fois envoyé, le mois ne se modifie plus, sauf si le bureau le refuse.</p>`;
   }
   if (h.lines.length) out += `<button class="btn ghost" data-act="hxlsx">${icon('down', 20)}Exporter en Excel</button>`;
   return out;
@@ -568,12 +618,16 @@ export function hoursBoardPage() {
   let out = monthNav(h) + ratesBlock(h);
   if (!coaches.length) return out + '<p class="empty">Aucune heure notée ce mois-ci.</p>';
   out += coaches.map((u) => {
-    const ls = h.lines.filter((l) => l.user_id === u), st = h.stmts.find((s) => s.user_id === u), tot = ls.reduce((a, l) => a + l.minutes, 0), opened = S.hOpen === u;
-    let c = `<div class="card"><button class="row" data-act="hopen" data-id="${u}" style="border:0"><span class="g">${esc(name(u))}<small>${byTeam(ls).map(([k, v]) => `${esc(k)} ${fmtMin(v)}`).join(' · ') || '—'}</small></span><b>${fmtMin(st && st.status !== 'refused' ? st.total_minutes : tot)}${h.rates?.[u] != null ? `<small style="display:block;font-weight:500">≈ ${money(((st && st.status !== 'refused' ? st.total_minutes : tot) / 60) * h.rates[u])}</small>` : ''}</b></button><div class="chips">${st ? STATE[st.status] : '<span class="pill">Pas encore envoyé</span>'}</div>`;
+    const ls = h.lines.filter((l) => l.user_id === u), mine = h.stmts.filter((x) => x.user_id === u), tot = ls.reduce((a, l) => a + l.minutes, 0), opened = S.hOpen === u;
+    const groups = groupsOf(ls), sts = mine.some((x) => x.whole) ? mine.filter((x) => x.whole) : mine; // n° 284 : un relevé par équipe
+    let c = `<div class="card"><button class="row" data-act="hopen" data-id="${u}" style="border:0"><span class="g">${esc(name(u))}<small>${byTeam(ls).map(([k, v]) => `${esc(k)} ${fmtMin(v)}`).join(' · ') || '—'}</small></span><b>${fmtMin(tot)}${h.rates?.[u] != null ? `<small style="display:block;font-weight:500">≈ ${money((tot / 60) * h.rates[u])}</small>` : ''}</b></button><div class="chips">${overall(h.stmts, u, groups)}</div>`;
     if (opened) c += `<div class="list">${ls.map((l) => `<div class="row static"><span class="g">${new Date(l.day + 'T12:00').toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })} · ${esc(l.kind)}<small>${[teamName(l.team_id), l.note].filter(Boolean).map(esc).join(' · ')}</small></span><b>${fmtMin(l.minutes)}</b></div>`).join('')}</div>`;
-    if (st?.status === 'submitted' && u !== S.me.id) c += `<div class="field"><label for="hc${u}">Commentaire (obligatoire pour refuser)</label><input id="hc${u}" data-hcom="${u}" maxlength="300" value="${esc((S.hCom || {})[u] || '')}"></div><div class="btns"><button class="btn main small" data-act="hok" data-id="${st.id}" data-v="1">Valider</button><button class="btn ghost small" data-act="hok" data-id="${st.id}" data-u="${u}" data-v="0">Refuser</button></div>`;
-    else if (st?.status === 'submitted') c += '<p class="note">Ton propre relevé est validé par un autre membre du bureau.</p>';
-    if (st?.status === 'refused' && st.comment) c += `<p class="note">Refusé : « ${esc(st.comment)} »</p>`;
+    sts.forEach((x) => {
+      const lab = x.whole ? 'Tout le mois' : tlabel(x.team_id);
+      if (x.status === 'submitted' && u !== S.me.id) c += `<div class="hstmt"><b>${esc(lab)} · ${fmtMin(x.total_minutes)}</b><div class="field"><label for="hc${x.id}">Commentaire (obligatoire pour refuser)</label><input id="hc${x.id}" data-hcom="${x.id}" maxlength="300" value="${esc((S.hCom || {})[x.id] || '')}"></div><div class="btns"><button class="btn main small" data-act="hok" data-id="${x.id}" data-v="1">Valider ${esc(lab)}</button><button class="btn ghost small" data-act="hok" data-id="${x.id}" data-u="${x.id}" data-v="0">Refuser</button></div></div>`;
+      else if (x.status === 'submitted') c += `<p class="note">${esc(lab)} : ton propre relevé est validé par un autre membre du bureau.</p>`;
+      else c += `<p class="note">${esc(lab)} · ${fmtMin(x.total_minutes)} : ${x.status === 'validated' ? 'validé' : 'refusé'}${x.status === 'refused' && x.comment ? ` (« ${esc(x.comment)} »)` : ''}</p>`;
+    });
     return c + '</div>';
   }).join('');
   out += `<button class="btn" data-act="hxlsx">${icon('down', 20)}Exporter le mois en Excel</button><p class="note">Onglet « Résumé » (coach, équipe, heures, état) et un onglet par coach.</p>`;
@@ -584,7 +638,7 @@ async function hoursXlsx() {
   const h = S.hr, c = (club()?.color1 || '#2F5BFF').replace('#', '').toUpperCase(), head = { font: { bold: true, color: { rgb: onColor('#' + c).slice(1) } }, fill: { fgColor: { rgb: c } } };
   const coaches = [...new Set(h.lines.map((l) => l.user_id))].sort((a, b) => name(a).localeCompare(name(b), 'fr'));
   const sum = [[`${BRAND.name} · ${club()?.name || ''} · heures des coachs · ${monthLabel(h.month)}`], [], ['Coach', 'Équipe', 'Heures', 'Minutes', 'État du relevé', 'Taux (€/h)', 'Montant (€)']];
-  coaches.forEach((u) => { const st = h.stmts.find((s) => s.user_id === u); byTeam(h.lines.filter((l) => l.user_id === u)).forEach(([k, v]) => sum.push([name(u), k, Math.round((v / 60) * 100) / 100, v, st ? { submitted: 'Envoyé', validated: 'Validé', refused: 'Refusé' }[st.status] : 'Pas envoyé', h.rates?.[u] ?? '', h.rates?.[u] != null ? Math.round((v / 60) * h.rates[u] * 100) / 100 : ''])); });
+  coaches.forEach((u) => { groupsOf(h.lines.filter((l) => l.user_id === u)).forEach(({ t, min: v, label: k }) => { const st = stOf(h.stmts, u, t); sum.push([name(u), k, Math.round((v / 60) * 100) / 100, v, st ? { submitted: 'Envoyé', validated: 'Validé', refused: 'Refusé' }[st.status] : 'Pas envoyé', h.rates?.[u] ?? '', h.rates?.[u] != null ? Math.round((v / 60) * h.rates[u] * 100) / 100 : '']); }); }); // n° 284 : état par équipe
   const ws = X.utils.aoa_to_sheet(sum); ws.A1.s = { font: { bold: true, sz: 14, color: { rgb: c } } }; ['A3', 'B3', 'C3', 'D3', 'E3', 'F3', 'G3'].forEach((k) => (ws[k].s = head));
   ws['!cols'] = [{ wch: 24 }, { wch: 18 }, { wch: 8 }, { wch: 9 }, { wch: 14 }, { wch: 10 }, { wch: 12 }];
   const wb = X.utils.book_new(), used = new Set(['Résumé']); X.utils.book_append_sheet(wb, ws, 'Résumé');
@@ -667,17 +721,19 @@ Object.assign(ACTIONS, {
   popen: (el, d) => { const p = S.plans.find((x) => x.id === d.id); S.plan = { club: S.clubId, id: p.id, title: p.title, team_id: p.team_id || '', event_id: p.event_id || '', notes: p.notes, items: p.items }; savePlanLocal(); S.ctab = 'seance'; S.view = { type: 'exos' }; render(); },
   pldel: async (el, d) => { if (!armed('pl' + d.id)) return; if (await run(sb.from('training_plans').delete().eq('id', d.id), 'Séance supprimée.')) { if (S.plan?.id === d.id) S.plan.id = null; await loadPlans(); render(true); } },
   pview: (el, d) => { const p = (S.evPlans || []).find((x) => x.id === d.id); if (p) printPlan(p); },
-  cstats: () => { S.st = null; statsPage(); return open({ type: 'stats' }, loadStats); },
+  cstats: () => { S.st = null; statsPage(); return open({ type: 'stats' }, loadStats); }, // n° 286 : depuis l'espace président (ou du directeur technique) : toutes les équipes
   stteam: (el, d) => { S.st.team = d.id; return open({ type: 'stats' }, loadStats); },
   stper: (el, d) => { S.st.period = d.v; return open({ type: 'stats' }, loadStats); },
   stxlsx: () => statsXlsx(),
-  stpdf: () => statsPdf(),
-  chours: (el, d) => { S.hr = { month: d?.month ? new Date(d.month + 'T12:00') : new Date(), board: false }; return open({ type: 'hours' }, loadHours); },
+  stpdf: () => openStatsPdf(S.st, club(), teamName(S.st.team), { mois: 'ce mois', '3mois': '3 derniers mois', saison: 'saison' }[S.st.period] || 'saison'), // n° 279 : sans noms
+  stpdfn: () => statsPdf(), // l'ancien tableau, avec les noms, sur demande
+  chours: (el, d) => { S.hr = { month: d?.month ? new Date(d.month + 'T12:00') : new Date(), board: false, team: d?.team || '' }; // n° 284 : équipe de la carte « Je corrige » en tête
+    return open({ type: 'hours' }, loadHours); },
   choursb: () => { S.hr = { month: new Date(), board: true }; S.hOpen = null; return open({ type: 'hoursb' }, loadHours); },
   hmonth: (el, d) => { const m = monthStart(S.hr.month); S.hr.month = new Date(m.getFullYear(), m.getMonth() + +d.v, 1); S.hr.lines = null; return open(S.view, loadHours); },
   hfill: async () => { const n = await run(sb.rpc('fill_coach_hours', { p_club: S.clubId, p_month: ymd(monthStart(S.hr.month)) })); if (n !== null) { toast(n ? plural(n, 'séance ajoutée', 'séances ajoutées') + '.' : 'Rien à ajouter : tes séances passées sont déjà notées.'); await loadHours(); render(true); } },
   hdel: async (el, d) => { if (await run(sb.from('coach_hours').delete().eq('id', d.id), 'Ligne retirée.')) { await loadHours(); render(true); } },
-  hsend: async () => { if (!armed('hsend')) return; if (await run(sb.rpc('submit_coach_month', { p_club: S.clubId, p_month: ymd(monthStart(S.hr.month)) }), 'Relevé envoyé au bureau.')) { await loadHours(); render(true); } },
+  hsend: async (el, d) => { const t = d?.t || ''; if (!armed('hsend:' + t)) return; if (await run(sb.rpc('submit_coach_team', { p_club: S.clubId, p_month: ymd(monthStart(S.hr.month)), p_team: t || null }), 'Heures ' + (t ? 'de ' + teamName(t) : 'sans équipe') + ' envoyées au bureau.')) { await loadHours(); const hf = await run(sb.from('hours_confirms').select('*')); if (hf) S.hconf = hf; /* n° 284 : seule la carte de cette équipe s'efface */ render(true); } },
   hopen: (el, d) => { S.hOpen = S.hOpen === d.id ? null : d.id; render(true); },
   hok: async (el, d) => {
     const ok = d.v === '1', com = ((S.hCom || {})[d.u] || '').trim();
@@ -723,7 +779,7 @@ FORMS.planf = async () => {
   if (!p.items.length) return toast('Ajoute au moins un exercice.');
   const row = { title: p.title.trim() || 'Séance', team_id: p.team_id || null, event_id: p.event_id || null, notes: p.notes || '', items: p.items.map((x) => ({ ...x, minutes: Math.min(120, Math.max(1, +x.minutes || 1)) })) };
   const r = p.id ? await run(sb.from('training_plans').update(row).eq('id', p.id).select().single()) : await run(sb.from('training_plans').insert({ ...row, club_id: S.clubId }).select().single());
-  if (r) { p.id = r.id; savePlanLocal(); toast(r.event_id ? 'Séance enregistrée et reliée à l’entraînement.' : 'Séance enregistrée.'); S.evPlans = null; render(true); }
+  if (r) { if (p.id !== r.id) { p.notified = r.staff_notified_at || null; p.dirty = false; } else if (planNotice(p).at) p.dirty = true; p.id = r.id; savePlanLocal(); toast(r.event_id ? 'Séance enregistrée et reliée à l’entraînement.' : 'Séance enregistrée.'); S.evPlans = null; render(true); }
 };
 FORMS.hf = async (v) => {
   const row = { club_id: S.clubId, user_id: S.me.id, day: v.day, kind: v.kind, team_id: v.team_id || null, minutes: +v.minutes, note: (v.note || '').trim() };

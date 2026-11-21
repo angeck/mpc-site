@@ -11,7 +11,7 @@ import { icon, field } from './ui.js';
 import { brandPreview, logoFields, updatePreview } from './auth.js';
 import { teamForm, loadXlsx } from './equipe.js';
 import { decodeText, bestSheet } from './importer.js';
-import { statusPills, feeState } from './joueur.js';
+import { statusPills, feeState, licLabel } from './joueur.js';
 
 // ---------- validations ----------
 function teamPick(m) {
@@ -67,7 +67,7 @@ export function membersBlock() {
   let h = `<div class="sec"><h2>${board ? 'Membres' : 'Membres de mon équipe'}</h2><span class="det">${people(S.roster).length}</span></div>${field('msq', '<span class="sr">Rechercher</span>', `<input id="msq" data-cq="mq" type="search" placeholder="Rechercher un prénom, un nom, un pseudo" value="${esc(S.mq || '')}">`)}`;
   if (mgmt) h += `<div class="chips">${['Tous', 'Encadrement', 'Coachs', 'Joueurs'].map((x) => `<button class="chip" data-act="mf" data-v="${x}" aria-pressed="${f === x}">${x}</button>`).join('')}</div><div class="grid2">${field('mte', 'Équipe', `<select id="mte" data-cs="mt2"><option value="">Toutes</option>${S.teams.map((x) => `<option value="${x.id}" ${t === x.id ? 'selected' : ''}>${esc(x.name)}</option>`).join('')}</select>`)}${field('mso', 'Trier par', `<select id="mso" data-cs="ms">${['nom', 'arrivée', 'rôle'].map((x) => `<option ${sort === x ? 'selected' : ''}>${x}</option>`).join('')}</select>`)}</div><label class="switch"><input type="checkbox" data-mall="1" ${S.mAll ? 'checked' : ''}><span>Afficher les profils de chacun</span></label>`;
   h += `<div class="card"><div class="list">${list.length ? list.map((p) => {
-    const open = S.mAll || (S.mOpen || {})[p.key], sub = [...new Set(p.tags.map((x) => (x.kind === 'joueur' ? 'Joueur' : ROLES[x.role])))].join(', ');
+    const open = S.mAll || (S.mOpen || {})[p.key] || (typeof matchMedia === 'function' && matchMedia('(min-width:960px)').matches), sub = [...new Set(p.tags.map((x) => (x.kind === 'joueur' ? 'Joueur' : ROLES[x.role])))].join(', ');
     return `<div class="row static" style="flex-direction:column;align-items:stretch;gap:6px"><div style="display:flex;align-items:center;gap:8px"><button class="g" data-act="mrow" data-k="${esc(p.key)}" style="background:none;border:0;text-align:left;padding:0;min-height:44px;color:inherit" aria-expanded="${!!open}">${esc(p.name)}<small>${esc(sub)}${open ? '' : ' · ' + plural(p.tags.length, 'profil')}</small></button>${p.player && (board || p.tags.some((x) => coachOf(x.team_id))) ? `<button class="btn small ghost" data-act="player" data-id="${p.player}">Fiche</button>` : p.user && board && p.user !== S.me.id ? `<button class="btn small ghost" data-act="member" data-id="${p.user}">Fiche</button>` : ''}</div>${open ? `<div class="chips" style="gap:6px">${p.tags.map((x) => tagHtml(x, mgmt)).join('')}</div>` : ''}</div>`;
   }).join('') : '<p class="empty">Personne ne correspond.</p>'}</div></div>`;
   if (board) { const fam = new Set(S.members.filter((m) => m.status === 'active' && ['parent', 'supporteur'].includes(m.role)).map((m) => m.user_id)), roleful = new Set(S.members.filter((m) => m.status === 'active' && !['parent', 'supporteur'].includes(m.role)).map((m) => m.user_id)); h += `<p class="note">Familles et supporteurs (sans autre rôle) : ${[...fam].filter((u) => !roleful.has(u)).length}. Les parents figurent sur la fiche de leur enfant.</p>`; }
@@ -93,7 +93,17 @@ export function licencesBlock() {
   const F = ['Tous', 'Licence à finir', ...(!nf ? ['Reste à payer'] : seeOk ? ['Cotisation pas à jour'] : []), 'Certificat manquant', ...(noBirth ? ['Date de naissance manquante'] : [])];
   const sub = (p, a) => (nf ? '' : ` · Dû ${eur(a.fee_amount)} · Réglé ${eur(a.fee_paid || 0)} · Reste ${eur(rest(p))}`);
   h += `<div class="chips">${F.map((x) => `<button class="chip" data-act="lf" data-v="${x}" aria-pressed="${f === x}">${x}</button>`).join('')}</div>`;
-  return h + `<details class="card" ${f !== 'Tous' ? 'open' : ''}><summary>${plural(list.length, 'joueur')}</summary><div class="list">${list.length ? list.map((p) => { const a = adminOf(p.id) || {}; return `<button class="row" data-act="player" data-id="${p.id}"><span class="g">${esc(pname(p))}<small>${esc(teamName(p.team_id) || 'Sans équipe')}${sub(p, a)}${p.birth_date ? '' : ' · date de naissance à compléter'}</small><span class="chips" style="gap:4px;margin-top:4px">${statusPills(p)}</span></span><span class="chev"></span></button>`; }).join('') : '<p class="empty">Aucun joueur dans ce filtre.</p>'}</div></details>`;
+  // bêta 1.1.0 · n° 244 : sur ordinateur, un tableau (joueur, équipe, licence, certificat, cotisation, dernier versement) ; la liste reste sur téléphone et tablette
+  const lastPay = (pid) => { const x = (S.payments || []).filter((y) => y.player_id === pid).sort((a, b) => new Date(b.paid_at) - new Date(a.paid_at))[0]; return x ? new Date(x.paid_at).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' }) : '—'; };
+  const fp = (a) => { const st = feeState(a); return `<span class="pill ${st === 'Payée' ? 'ok' : st === 'À payer' ? 'ko' : 'wait'}">${esc(st)}</span>`; };
+  const tcols = nf ? ['Joueur', 'Équipe', 'Licence', 'Certificat', ...(seeOk ? ['Cotisation'] : [])] : ['Joueur', 'Équipe', 'Licence', 'Certificat', 'Dû', 'Versé', 'Reste', 'Cotisation', 'Dernier versement'];
+  const R = new Set(['Dû', 'Versé', 'Reste']);
+  const trow = (p) => { const a = adminOf(p.id) || {}, li = a.licence_state || 'Préinscrit club';
+    const base = [`<button class="tlink" data-act="player" data-id="${p.id}">${esc(pname(p))}</button>`, esc(teamName(p.team_id) || 'Sans équipe'), `<span class="pill ${li === 'Licencié' ? 'ok' : li === 'Préinscrit fédé' ? 'wait' : 'ko'}">${esc(licLabel(li))}</span>`, a.health_doc ? 'Fourni' : '<span class="nobody">À fournir</span>'];
+    const more = nf ? (seeOk ? [a.fee_ok == null ? '—' : a.fee_ok ? '<span class="pill ok">À jour</span>' : '<span class="pill ko">En retard</span>'] : []) : [eur(a.fee_amount), eur(a.fee_paid || 0), rest(p) ? `<b>${eur(rest(p))}</b>` : '—', fp(a), lastPay(p.id)];
+    return `<tr>${base.concat(more).map((c, i) => `<td class="${R.has(tcols[i]) ? 'r' : ''}">${c}</td>`).join('')}</tr>`; };
+  if (list.length) h += `<div class="gtab card"><table class="ptable"><thead><tr>${tcols.map((c) => `<th scope="col" class="${R.has(c) ? 'r' : ''}">${c}</th>`).join('')}</tr></thead><tbody>${list.map(trow).join('')}</tbody></table></div>`;
+  return h + `<details class="card ${list.length ? 'notpc' : ''}" ${f !== 'Tous' ? 'open' : ''}><summary>${plural(list.length, 'joueur')}</summary><div class="list">${list.length ? list.map((p) => { const a = adminOf(p.id) || {}; return `<button class="row" data-act="player" data-id="${p.id}"><span class="g">${esc(pname(p))}<small>${esc(teamName(p.team_id) || 'Sans équipe')}${sub(p, a)}${p.birth_date ? '' : ' · date de naissance à compléter'}</small><span class="chips" style="gap:4px;margin-top:4px">${statusPills(p)}</span></span><span class="chev"></span></button>`; }).join('') : '<p class="empty">Aucun joueur dans ce filtre.</p>'}</div></details>`;
 }
 export function namesToCheck() {
   if (!hasArea('secretariat')) return '';
